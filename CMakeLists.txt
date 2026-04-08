@@ -27,16 +27,18 @@ set(SOURCES
     src/profilewidget.cpp
     src/sensorworker.cpp
     src/vcprotocol.cpp
-    src/jsonplayer.cpp        # NEW: JSON playback
+    src/jsonplayer.cpp
+    src/measurementlogger.cpp   # CSV measurement log
 )
 
 set(HEADERS
-    include/types.h           # Shared types (ProfilePoint, RoiRect) – no Win headers
+    include/types.h               # Shared types (ProfilePoint, RoiRect) – no Win headers
     include/mainwindow.h
     include/profilewidget.h
     include/sensorworker.h
     include/vcprotocol.h
     include/jsonplayer.h
+    include/measurementlogger.h   # CSV measurement log
 )
 
 # ── Executable ────────────────────────────────────────────────────────────────

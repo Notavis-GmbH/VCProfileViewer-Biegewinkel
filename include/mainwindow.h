@@ -18,6 +18,7 @@
 #include "sensorworker.h"
 #include "profilewidget.h"
 #include "jsonplayer.h"
+#include "measurementlogger.h"
 
 // ──────────────────────────────────────────────
 //  Source mode
@@ -64,11 +65,17 @@ private slots:
     void onJsonPlaybackStopped();
     void onJsonProfileReady(const std::vector<ProfilePoint> &points);
 
+    // Measurement log
+    void onLogToggle(bool checked);
+    void onLogBrowse();
+    void onLogRowWritten(int row);
+
 private:
     void buildUi();
     void buildSensorGroup(QWidget *parent, class QVBoxLayout *layout);
     void buildRoiGroup(QWidget *parent, class QVBoxLayout *layout);
     void buildPlaybackGroup(QWidget *parent, class QVBoxLayout *layout);
+    void buildLogGroup(QWidget *parent, class QVBoxLayout *layout);
     void buildStatusBar();
 
     void applySourceMode();
@@ -123,9 +130,17 @@ private:
     QLabel         *m_lblSpeed     = nullptr;
     QLabel         *m_lblFrameInfo = nullptr;
 
+    // Log group
+    QGroupBox      *m_logGroup      = nullptr;
+    QLineEdit      *m_editLogPath   = nullptr;
+    QPushButton    *m_btnLogBrowse  = nullptr;
+    QPushButton    *m_btnLogToggle  = nullptr;
+    QLabel         *m_lblLogStatus  = nullptr;
+
     // ── Backend objects ───────────────────────
-    SensorWorker   *m_sensorWorker = nullptr;  // SensorWorker is a QThread itself
-    JsonPlayer     *m_jsonPlayer   = nullptr;
+    SensorWorker        *m_sensorWorker = nullptr;
+    JsonPlayer          *m_jsonPlayer   = nullptr;
+    MeasurementLogger   *m_logger       = nullptr;
 
     SourceMode      m_sourceMode   = SourceMode::LiveSensor;
 };

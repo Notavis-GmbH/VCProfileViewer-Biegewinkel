@@ -444,6 +444,12 @@ MainWindow::MainWindow(QWidget *parent)
     // JSON player (no thread needed – all Qt slots, no blocking I/O)
     m_jsonPlayer = new JsonPlayer(this);
 
+    // Measurement logger
+    m_logger = new MeasurementLogger(this);
+    connect(m_logger, &MeasurementLogger::rowWritten,  this, &MainWindow::onLogRowWritten);
+    connect(m_logger, &MeasurementLogger::logOpened,   this, [this]{ m_lblLogStatus->setText("<b style='color:#00e676'>● Aufzeichnung: 0 Zeilen</b>"); });
+    connect(m_logger, &MeasurementLogger::logClosed,   this, [this]{ m_lblLogStatus->setText("Bereit"); m_btnLogToggle->setChecked(false); m_btnLogToggle->setText("● Aufzeichnung starten"); m_btnLogToggle->setStyleSheet("background:#1a5c2e; color:white; padding:5px; border-radius:4px;"); });
+
     buildUi();
     buildStatusBar();
     loadSettings();
@@ -535,6 +541,9 @@ void MainWindow::buildUi()
     resultLayout->addWidget(m_lblPhi1);
     resultLayout->addWidget(m_lblPhi2);
     leftLayout->addWidget(resultGroup);
+
+    // Log group
+    buildLogGroup(leftPanel, leftLayout);
 
     leftLayout->addStretch();
 
@@ -668,6 +677,40 @@ void MainWindow::buildRoiGroup(QWidget * /*parent*/, QVBoxLayout *layout)
     connect(m_roi1End,   QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MainWindow::onRoi1Changed);
     connect(m_roi2Start, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MainWindow::onRoi2Changed);
     connect(m_roi2End,   QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MainWindow::onRoi2Changed);
+}
+
+void MainWindow::buildLogGroup(QWidget * /*parent*/, QVBoxLayout *layout)
+{
+    m_logGroup = new QGroupBox("Messwert-Log (CSV)");
+    QVBoxLayout *vbl = new QVBoxLayout(m_logGroup);
+
+    // Path row
+    QHBoxLayout *pathRow = new QHBoxLayout;
+    m_editLogPath = new QLineEdit;
+    m_editLogPath->setPlaceholderText("Log-Pfad wählen…");
+    m_editLogPath->setReadOnly(false);
+    m_btnLogBrowse = new QPushButton("…");
+    m_btnLogBrowse->setMaximumWidth(32);
+    m_btnLogBrowse->setToolTip("Log-Datei wählen");
+    pathRow->addWidget(m_editLogPath);
+    pathRow->addWidget(m_btnLogBrowse);
+    vbl->addLayout(pathRow);
+
+    // Toggle button
+    m_btnLogToggle = new QPushButton("● Aufzeichnung starten");
+    m_btnLogToggle->setCheckable(true);
+    m_btnLogToggle->setStyleSheet("background:#1a5c2e; color:white; padding:5px; border-radius:4px;");
+    vbl->addWidget(m_btnLogToggle);
+
+    // Status label
+    m_lblLogStatus = new QLabel("Bereit");
+    m_lblLogStatus->setStyleSheet("color:#888; font-size:10px;");
+    vbl->addWidget(m_lblLogStatus);
+
+    layout->addWidget(m_logGroup);
+
+    connect(m_btnLogBrowse, &QPushButton::clicked, this, &MainWindow::onLogBrowse);
+    connect(m_btnLogToggle, &QPushButton::toggled, this, &MainWindow::onLogToggle);
 }
 
 void MainWindow::buildPlaybackGroup(QWidget * /*parent*/, QVBoxLayout *layout)
@@ -1068,6 +1111,31 @@ void MainWindow::computeAndDisplayFitLines(const std::vector<ProfilePoint> &pts)
     updateMethodLabel(m_lblMethod1, m1, fl1);
     updateMethodLabel(m_lblMethod2, m2, fl2);
 
+    // ── Messwert-Log ──────────────────────────────────────────────────────
+    if (m_logger->isOpen()) {
+        LogEntry entry;
+        entry.timestamp      = QDateTime::currentDateTime();
+        entry.valid1         = fl1.valid;
+        entry.phi1_deg       = fl1.valid ? fl1.phi : 0.0;
+        entry.rms1_um        = fl1.valid ? fl1.rmsResidual * 1000.0 : 0.0;
+        entry.maxRes1_um     = fl1.valid ? fl1.maxResidual * 1000.0 : 0.0;
+        entry.method1        = fl1.valid ? inlineMethodName(m1, fl1) : QString();
+        entry.inlier1        = (fl1.valid && m1 == FitMethod::Auto) ? fl1.autoInfo.inlierRatioRansac : -1.0;
+        entry.roi1Start_mm   = m_roi1Start->value();
+        entry.roi1End_mm     = m_roi1End->value();
+        entry.valid2         = fl2.valid;
+        entry.phi2_deg       = fl2.valid ? fl2.phi : 0.0;
+        entry.rms2_um        = fl2.valid ? fl2.rmsResidual * 1000.0 : 0.0;
+        entry.maxRes2_um     = fl2.valid ? fl2.maxResidual * 1000.0 : 0.0;
+        entry.method2        = fl2.valid ? inlineMethodName(m2, fl2) : QString();
+        entry.inlier2        = (fl2.valid && m2 == FitMethod::Auto) ? fl2.autoInfo.inlierRatioRansac : -1.0;
+        entry.roi2Start_mm   = m_roi2Start->value();
+        entry.roi2End_mm     = m_roi2End->value();
+        entry.bendingAngle_deg = std::abs(bendingAngle);
+        entry.hasBending     = fl1.valid && fl2.valid;
+        m_logger->append(entry);
+    }
+
     // Method name helper (for Auto mode shows "Auto→Hough" etc.)
     auto methodName = [](FitMethod requested, const FitLine &fl) -> QString {
         if (requested == FitMethod::Auto && fl.valid) {
@@ -1156,18 +1224,27 @@ void MainWindow::saveSettings()
     s.setValue("Playback/Folder",m_editFolder->text());
     s.setValue("Playback/Speed", m_speedSlider->value());
     s.setValue("Source/Mode",    static_cast<int>(m_sourceMode));
+    s.setValue("Log/Path",       m_editLogPath->text());
 }
 
 void MainWindow::loadSettings()
 {
     QString path = settingsPath();
 
-    // Create Devices folder if it doesn't exist
+    // Create Devices/Data/Logs folders if they don't exist
     QDir dir(QApplication::applicationDirPath());
     dir.mkpath("Devices");
     dir.mkpath("Data");
+    dir.mkpath("Logs");
 
-    if (!QFile::exists(path)) return;
+    if (!QFile::exists(path)) {
+        // Set a sensible default log path
+        QString defaultLog = QDir(QApplication::applicationDirPath()).filePath(
+            QString("Logs/MeasLog_%1.csv")
+                .arg(QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss")));
+        m_editLogPath->setText(defaultLog);
+        return;
+    }
 
     QSettings s(path, QSettings::IniFormat);
     m_editIp->setText(s.value("Sensor/IP",   "192.168.3.15").toString());
@@ -1191,6 +1268,15 @@ void MainWindow::loadSettings()
         m_sourceMode = SourceMode::JsonPlayback;
     }
 
+    // Log path
+    QString logPath = s.value("Log/Path", "").toString();
+    if (logPath.isEmpty()) {
+        logPath = QDir(QApplication::applicationDirPath()).filePath(
+            QString("Logs/MeasLog_%1.csv")
+                .arg(QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss")));
+    }
+    m_editLogPath->setText(logPath);
+
     // Sync ROIs to chart – valid=true so they are drawn immediately
     { RoiRect r; r.xMin = m_roi1Start->value(); r.xMax = m_roi1End->value(); r.valid = (r.xMax > r.xMin); m_profileWidget->setRoi(0, r); }
     { RoiRect r; r.xMin = m_roi2Start->value(); r.xMax = m_roi2End->value(); r.valid = (r.xMax > r.xMin); m_profileWidget->setRoi(1, r); }
@@ -1199,10 +1285,64 @@ void MainWindow::loadSettings()
 void MainWindow::closeEvent(QCloseEvent *event)
 {
     saveSettings();
+    if (m_logger->isOpen()) m_logger->close();
     if (m_sensorWorker && m_sensorWorker->isRunning()) {
         m_sensorWorker->stopCapture();
         m_sensorWorker->wait(3000);
     }
     m_jsonPlayer->stop();
     event->accept();
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+//  Messwert-Log Slots
+// ──────────────────────────────────────────────────────────────────────────────
+void MainWindow::onLogBrowse()
+{
+    QString suggested = m_editLogPath->text();
+    if (suggested.isEmpty()) {
+        suggested = QDir(QApplication::applicationDirPath()).filePath(
+            QString("Logs/MeasLog_%1.csv")
+                .arg(QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss")));
+    }
+    QString fn = QFileDialog::getSaveFileName(
+        this, "Log-Datei wählen", suggested,
+        "CSV-Dateien (*.csv);;Alle Dateien (*)");
+    if (!fn.isEmpty())
+        m_editLogPath->setText(fn);
+}
+
+void MainWindow::onLogToggle(bool checked)
+{
+    if (checked) {
+        QString p = m_editLogPath->text().trimmed();
+        if (p.isEmpty()) {
+            p = QDir(QApplication::applicationDirPath()).filePath(
+                QString("Logs/MeasLog_%1.csv")
+                    .arg(QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss")));
+            m_editLogPath->setText(p);
+        }
+        // Ensure parent directory exists
+        QDir().mkpath(QFileInfo(p).absolutePath());
+        if (!m_logger->open(p)) {
+            QMessageBox::warning(this, "Log-Fehler",
+                QString("Konnte Log-Datei nicht öffnen:\n%1").arg(p));
+            m_btnLogToggle->setChecked(false);
+            return;
+        }
+        m_btnLogToggle->setText("■ Aufzeichnung stoppen");
+        m_btnLogToggle->setStyleSheet("background:#5c1a1a; color:white; padding:5px; border-radius:4px;");
+    } else {
+        m_logger->close();
+        m_btnLogToggle->setText("● Aufzeichnung starten");
+        m_btnLogToggle->setStyleSheet("background:#1a5c2e; color:white; padding:5px; border-radius:4px;");
+    }
+}
+
+void MainWindow::onLogRowWritten(int row)
+{
+    m_lblLogStatus->setText(
+        QString("<b style='color:#00e676'>● Aufzeichnung: %1 Zeile%2</b>")
+            .arg(row)
+            .arg(row == 1 ? "" : "n"));
 }

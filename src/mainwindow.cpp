@@ -1366,8 +1366,13 @@ void MainWindow::applyPreset(const QString &name)
     m_roi2Start->setValue(     ps.value("ROI2_Start",        0.0).toDouble());
     m_roi2End->setValue(       ps.value("ROI2_End",         100.0).toDouble());
     m_roi2Method->setCurrentIndex(ps.value("ROI2_Method", 0).toInt());
-    const QString folder = ps.value("Playback_Folder", "").toString();
-    if (!folder.isEmpty()) m_editFolder->setText(folder);
+    // Expand relative folder paths (e.g. "TestData") to absolute path next to EXE
+    QString folder = ps.value("Playback_Folder", "").toString();
+    if (!folder.isEmpty()) {
+        if (QDir(folder).isRelative())
+            folder = QDir(QApplication::applicationDirPath()).filePath(folder);
+        m_editFolder->setText(folder);
+    }
     m_speedSlider->setValue(   ps.value("Playback_Speed",   5).toInt());
     onSpeedSliderChanged(m_speedSlider->value());
     const int mode = ps.value("Source_Mode", 0).toInt();
@@ -1381,6 +1386,12 @@ void MainWindow::applyPreset(const QString &name)
     // Sync ROIs to chart
     { RoiRect r; r.xMin = m_roi1Start->value(); r.xMax = m_roi1End->value(); r.valid = (r.xMax > r.xMin); m_profileWidget->setRoi(0, r); }
     { RoiRect r; r.xMin = m_roi2Start->value(); r.xMax = m_roi2End->value(); r.valid = (r.xMax > r.xMin); m_profileWidget->setRoi(1, r); }
+
+    // Auto-load JSON folder if in playback mode and folder exists
+    if (m_sourceMode == SourceMode::JsonPlayback && !folder.isEmpty() && QDir(folder).exists()) {
+        qInfo().noquote() << "[Preset] Lade JSON-Ordner automatisch:" << folder;
+        m_jsonPlayer->loadFolder(folder);
+    }
 
     m_presetLoading = false;
 
@@ -1577,7 +1588,7 @@ void MainWindow::loadSettings()
             ps.setValue("ROI2_Start",       18.0);
             ps.setValue("ROI2_End",         55.0);
             ps.setValue("ROI2_Method",      3);    // Auto
-            ps.setValue("Playback_Folder", testDataPath);
+            ps.setValue("Playback_Folder", QString("TestData"));  // relative – expanded at load time
             ps.setValue("Playback_Speed",  5);     // 1.0×
             ps.setValue("Source_Mode",     1);     // JSON Wiedergabe
             ps.setValue("Log_Path",        defaultLogPath);

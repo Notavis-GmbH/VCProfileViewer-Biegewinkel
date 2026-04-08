@@ -70,13 +70,26 @@ private slots:
     void onLogBrowse();
     void onLogRowWritten(int row);
 
+    // Preset management
+    void onPresetSelected(int index);
+    void onPresetSave();
+    void onPresetRename();
+    void onPresetDelete();
+
 private:
     void buildUi();
     void buildSensorGroup(QWidget *parent, class QVBoxLayout *layout);
     void buildRoiGroup(QWidget *parent, class QVBoxLayout *layout);
     void buildPlaybackGroup(QWidget *parent, class QVBoxLayout *layout);
     void buildLogGroup(QWidget *parent, class QVBoxLayout *layout);
+    void buildPresetGroup(QWidget *parent, class QVBoxLayout *layout);
     void buildStatusBar();
+
+    // Preset helpers
+    QString presetsPath() const;
+    void    refreshPresetCombo();
+    void    applyPreset(const QString &name);
+    void    writePreset(const QString &name);
 
     void applySourceMode();
     void updateConnectButtons(bool connected);
@@ -136,6 +149,14 @@ private:
     QPushButton    *m_btnLogBrowse  = nullptr;
     QPushButton    *m_btnLogToggle  = nullptr;
     QLabel         *m_lblLogStatus  = nullptr;
+
+    // Preset group
+    QGroupBox      *m_presetGroup   = nullptr;
+    QComboBox      *m_cmbPresets    = nullptr;
+    QPushButton    *m_btnPresetSave = nullptr;
+    QPushButton    *m_btnPresetRen  = nullptr;
+    QPushButton    *m_btnPresetDel  = nullptr;
+    bool            m_presetLoading = false;  // suppress recursive signals during applyPreset
 
     // ── Backend objects ───────────────────────
     SensorWorker        *m_sensorWorker = nullptr;

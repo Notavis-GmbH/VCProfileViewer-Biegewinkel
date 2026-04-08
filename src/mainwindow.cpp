@@ -15,6 +15,7 @@
 #include <QSlider>
 #include <QFileDialog>
 #include <QMessageBox>
+#include <QInputDialog>
 #include <QThread>
 #include <QCloseEvent>
 #include <QSettings>
@@ -545,6 +546,10 @@ void MainWindow::buildUi()
     // Log group
     buildLogGroup(leftPanel, leftLayout);
 
+    // Preset group
+    m_presetGroup = new QGroupBox("Typverwaltung");
+    buildPresetGroup(leftPanel, leftLayout);
+
     leftLayout->addStretch();
 
     scroll->setWidget(leftPanel);
@@ -711,6 +716,52 @@ void MainWindow::buildLogGroup(QWidget * /*parent*/, QVBoxLayout *layout)
 
     connect(m_btnLogBrowse, &QPushButton::clicked, this, &MainWindow::onLogBrowse);
     connect(m_btnLogToggle, &QPushButton::toggled, this, &MainWindow::onLogToggle);
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+//  Typverwaltung (Presets)
+// ──────────────────────────────────────────────────────────────────────────────
+void MainWindow::buildPresetGroup(QWidget * /*parent*/, QVBoxLayout *layout)
+{
+    QVBoxLayout *vbl = new QVBoxLayout(m_presetGroup);
+    vbl->setSpacing(6);
+
+    // ComboBox row
+    QHBoxLayout *comboRow = new QHBoxLayout;
+    m_cmbPresets = new QComboBox;
+    m_cmbPresets->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    m_cmbPresets->setToolTip("Gespeicherten Typ laden");
+    comboRow->addWidget(m_cmbPresets);
+    vbl->addLayout(comboRow);
+
+    // Button row
+    QHBoxLayout *btnRow = new QHBoxLayout;
+    btnRow->setSpacing(4);
+
+    m_btnPresetSave = new QPushButton("Speichern");
+    m_btnPresetSave->setToolTip("Aktuelle Einstellungen als neuen Typ speichern");
+    m_btnPresetSave->setStyleSheet("background:#1a3c5c; color:white; padding:4px 6px; border-radius:4px;");
+
+    m_btnPresetRen = new QPushButton("Umbenennen");
+    m_btnPresetRen->setToolTip("Ausgewählten Typ umbenennen");
+    m_btnPresetRen->setStyleSheet("background:#2a2a2a; color:#ccc; padding:4px 6px; border-radius:4px;");
+
+    m_btnPresetDel = new QPushButton("Löschen");
+    m_btnPresetDel->setToolTip("Ausgewählten Typ löschen");
+    m_btnPresetDel->setStyleSheet("background:#3c1a1a; color:#ccc; padding:4px 6px; border-radius:4px;");
+
+    btnRow->addWidget(m_btnPresetSave);
+    btnRow->addWidget(m_btnPresetRen);
+    btnRow->addWidget(m_btnPresetDel);
+    vbl->addLayout(btnRow);
+
+    layout->addWidget(m_presetGroup);
+
+    connect(m_cmbPresets,    QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &MainWindow::onPresetSelected);
+    connect(m_btnPresetSave, &QPushButton::clicked, this, &MainWindow::onPresetSave);
+    connect(m_btnPresetRen,  &QPushButton::clicked, this, &MainWindow::onPresetRename);
+    connect(m_btnPresetDel,  &QPushButton::clicked, this, &MainWindow::onPresetDelete);
 }
 
 void MainWindow::buildPlaybackGroup(QWidget * /*parent*/, QVBoxLayout *layout)
@@ -1203,6 +1254,176 @@ void MainWindow::updatePlayButtons(bool playing)
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
+//  Preset management
+// ──────────────────────────────────────────────────────────────────────────────
+QString MainWindow::presetsPath() const
+{
+    return QDir(QApplication::applicationDirPath()).filePath("Devices/Presets.ini");
+}
+
+void MainWindow::refreshPresetCombo()
+{
+    QSignalBlocker blocker(m_cmbPresets);
+    m_cmbPresets->clear();
+    m_cmbPresets->addItem("– Typ wählen –");
+
+    QSettings ps(presetsPath(), QSettings::IniFormat);
+    const QStringList groups = ps.childGroups();
+    for (const QString &g : groups)
+        m_cmbPresets->addItem(g);
+
+    m_btnPresetRen->setEnabled(m_cmbPresets->count() > 1);
+    m_btnPresetDel->setEnabled(m_cmbPresets->count() > 1);
+}
+
+void MainWindow::writePreset(const QString &name)
+{
+    QSettings ps(presetsPath(), QSettings::IniFormat);
+    ps.beginGroup(name);
+    ps.setValue("Sensor/IP",       m_editIp->text());
+    ps.setValue("Sensor/Port",     m_editPort->text());
+    ps.setValue("ROI1/Start",      m_roi1Start->value());
+    ps.setValue("ROI1/End",        m_roi1End->value());
+    ps.setValue("ROI1/Method",     m_roi1Method->currentIndex());
+    ps.setValue("ROI2/Start",      m_roi2Start->value());
+    ps.setValue("ROI2/End",        m_roi2End->value());
+    ps.setValue("ROI2/Method",     m_roi2Method->currentIndex());
+    ps.setValue("Playback/Folder", m_editFolder->text());
+    ps.setValue("Playback/Speed",  m_speedSlider->value());
+    ps.setValue("Source/Mode",     static_cast<int>(m_sourceMode));
+    ps.setValue("Log/Path",        m_editLogPath->text());
+    ps.endGroup();
+    ps.sync();
+}
+
+void MainWindow::applyPreset(const QString &name)
+{
+    QSettings ps(presetsPath(), QSettings::IniFormat);
+    if (!ps.childGroups().contains(name)) return;
+
+    m_presetLoading = true;
+
+    ps.beginGroup(name);
+    m_editIp->setText(         ps.value("Sensor/IP",       "192.168.3.15").toString());
+    m_editPort->setText(       ps.value("Sensor/Port",     "1096").toString());
+    m_roi1Start->setValue(     ps.value("ROI1/Start",      -100.0).toDouble());
+    m_roi1End->setValue(       ps.value("ROI1/End",          0.0).toDouble());
+    m_roi1Method->setCurrentIndex(ps.value("ROI1/Method", 0).toInt());
+    m_roi2Start->setValue(     ps.value("ROI2/Start",        0.0).toDouble());
+    m_roi2End->setValue(       ps.value("ROI2/End",         100.0).toDouble());
+    m_roi2Method->setCurrentIndex(ps.value("ROI2/Method", 0).toInt());
+    const QString folder = ps.value("Playback/Folder", "").toString();
+    if (!folder.isEmpty()) m_editFolder->setText(folder);
+    m_speedSlider->setValue(   ps.value("Playback/Speed",   5).toInt());
+    onSpeedSliderChanged(m_speedSlider->value());
+    const int mode = ps.value("Source/Mode", 0).toInt();
+    if (mode == 1) { m_rbPlayback->setChecked(true); m_sourceMode = SourceMode::JsonPlayback; }
+    else           { m_rbLive->setChecked(true);     m_sourceMode = SourceMode::LiveSensor;   }
+    applySourceMode();
+    const QString logPath = ps.value("Log/Path", "").toString();
+    if (!logPath.isEmpty()) m_editLogPath->setText(logPath);
+    ps.endGroup();
+
+    // Sync ROIs to chart
+    { RoiRect r; r.xMin = m_roi1Start->value(); r.xMax = m_roi1End->value(); r.valid = (r.xMax > r.xMin); m_profileWidget->setRoi(0, r); }
+    { RoiRect r; r.xMin = m_roi2Start->value(); r.xMax = m_roi2End->value(); r.valid = (r.xMax > r.xMin); m_profileWidget->setRoi(1, r); }
+
+    m_presetLoading = false;
+
+    statusBar()->showMessage(QString("Typ geladen: %1").arg(name), 3000);
+}
+
+void MainWindow::onPresetSelected(int index)
+{
+    if (m_presetLoading || index <= 0) return;  // 0 = placeholder
+    applyPreset(m_cmbPresets->itemText(index));
+}
+
+void MainWindow::onPresetSave()
+{
+    bool ok = false;
+    QString name = QInputDialog::getText(
+        this, "Typ speichern",
+        "Name für diesen Typ:",
+        QLineEdit::Normal,
+        m_cmbPresets->currentIndex() > 0 ? m_cmbPresets->currentText() : QString(),
+        &ok);
+    if (!ok || name.trimmed().isEmpty()) return;
+    name = name.trimmed();
+
+    // Overwrite-Warnung nur wenn neuer Name
+    QSettings ps(presetsPath(), QSettings::IniFormat);
+    if (ps.childGroups().contains(name)) {
+        auto btn = QMessageBox::question(this, "Überschreiben?",
+            QString("Typ \"<b>%1</b>\" existiert bereits.<br>Überschreiben?").arg(name),
+            QMessageBox::Yes | QMessageBox::No);
+        if (btn != QMessageBox::Yes) return;
+    }
+
+    writePreset(name);
+    refreshPresetCombo();
+
+    // Select the just-saved preset
+    int idx = m_cmbPresets->findText(name);
+    if (idx >= 0) { QSignalBlocker b(m_cmbPresets); m_cmbPresets->setCurrentIndex(idx); }
+    statusBar()->showMessage(QString("Typ gespeichert: %1").arg(name), 3000);
+}
+
+void MainWindow::onPresetRename()
+{
+    int idx = m_cmbPresets->currentIndex();
+    if (idx <= 0) return;
+    const QString oldName = m_cmbPresets->currentText();
+
+    bool ok = false;
+    QString newName = QInputDialog::getText(
+        this, "Typ umbenennen",
+        "Neuer Name:",
+        QLineEdit::Normal, oldName, &ok);
+    if (!ok || newName.trimmed().isEmpty() || newName.trimmed() == oldName) return;
+    newName = newName.trimmed();
+
+    // Copy settings to new group, remove old
+    QSettings ps(presetsPath(), QSettings::IniFormat);
+    ps.beginGroup(oldName);
+    QStringList keys = ps.allKeys();
+    QVariantMap vals;
+    for (const QString &k : keys) vals[k] = ps.value(k);
+    ps.endGroup();
+    ps.remove(oldName);
+    ps.beginGroup(newName);
+    for (auto it = vals.cbegin(); it != vals.cend(); ++it)
+        ps.setValue(it.key(), it.value());
+    ps.endGroup();
+    ps.sync();
+
+    refreshPresetCombo();
+    int newIdx = m_cmbPresets->findText(newName);
+    if (newIdx >= 0) { QSignalBlocker b(m_cmbPresets); m_cmbPresets->setCurrentIndex(newIdx); }
+    statusBar()->showMessage(QString("Typ umbenannt: %1 → %2").arg(oldName, newName), 3000);
+}
+
+void MainWindow::onPresetDelete()
+{
+    int idx = m_cmbPresets->currentIndex();
+    if (idx <= 0) return;
+    const QString name = m_cmbPresets->currentText();
+
+    auto btn = QMessageBox::question(this, "Typ löschen",
+        QString("Typ \"<b>%1</b>\" wirklich löschen?").arg(name),
+        QMessageBox::Yes | QMessageBox::No);
+    if (btn != QMessageBox::Yes) return;
+
+    QSettings ps(presetsPath(), QSettings::IniFormat);
+    ps.remove(name);
+    ps.sync();
+
+    refreshPresetCombo();
+    m_cmbPresets->setCurrentIndex(0);
+    statusBar()->showMessage(QString("Typ gelöscht: %1").arg(name), 3000);
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 //  Settings (QSettings → Devices/default.ini)
 // ──────────────────────────────────────────────────────────────────────────────
 QString MainWindow::settingsPath() const
@@ -1280,6 +1501,9 @@ void MainWindow::loadSettings()
     // Sync ROIs to chart – valid=true so they are drawn immediately
     { RoiRect r; r.xMin = m_roi1Start->value(); r.xMax = m_roi1End->value(); r.valid = (r.xMax > r.xMin); m_profileWidget->setRoi(0, r); }
     { RoiRect r; r.xMin = m_roi2Start->value(); r.xMax = m_roi2End->value(); r.valid = (r.xMax > r.xMin); m_profileWidget->setRoi(1, r); }
+
+    // Populate preset combo (Presets.ini may not exist yet – that's fine)
+    refreshPresetCombo();
 }
 
 void MainWindow::closeEvent(QCloseEvent *event)

@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 #include "types.h"  // ProfilePoint
 
 #ifdef _WIN32

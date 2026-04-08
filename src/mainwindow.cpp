@@ -440,17 +440,17 @@ void MainWindow::onRoi2Changed()
         m_sensorWorker->updateRois(roi1, roi2);
 }
 
-void MainWindow::onRoiDrawn(int roiIndex, float xStart, float xEnd)
+void MainWindow::onRoiDrawn(int roiIndex, RoiRect r)
 {
-    // Update spinboxes without triggering another onRoi1/2Changed
+    float xStart = static_cast<float>(r.xMin);
+    float xEnd   = static_cast<float>(r.xMax);
     if (roiIndex == 0) {
         QSignalBlocker b1(m_roi1Start), b2(m_roi1End);
         m_roi1Start->setValue(xStart);
         m_roi1End->setValue(xEnd);
         if (m_sensorWorker && m_sourceMode == SourceMode::LiveSensor) {
-            RoiRect r1; r1.xMin = xStart; r1.xMax = xEnd;
             RoiRect r2; r2.xMin = m_roi2Start->value(); r2.xMax = m_roi2End->value();
-            m_sensorWorker->updateRois(r1, r2);
+            m_sensorWorker->updateRois(r, r2);
         }
     } else {
         QSignalBlocker b1(m_roi2Start), b2(m_roi2End);
@@ -458,8 +458,7 @@ void MainWindow::onRoiDrawn(int roiIndex, float xStart, float xEnd)
         m_roi2End->setValue(xEnd);
         if (m_sensorWorker && m_sourceMode == SourceMode::LiveSensor) {
             RoiRect r1; r1.xMin = m_roi1Start->value(); r1.xMax = m_roi1End->value();
-            RoiRect r2; r2.xMin = xStart; r2.xMax = xEnd;
-            m_sensorWorker->updateRois(r1, r2);
+            m_sensorWorker->updateRois(r1, r);
         }
     }
     statusBar()->showMessage(QString("ROI %1 gesetzt: %2 … %3 mm")

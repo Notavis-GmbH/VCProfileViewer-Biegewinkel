@@ -47,7 +47,7 @@ private slots:
     // ROI
     void onRoi1Changed();
     void onRoi2Changed();
-    void onRoiDrawn(int roiIndex, float xStart, float xEnd);
+    void onRoiDrawn(int roiIndex, RoiRect r);
 
     // JSON Playback
     void onSourceModeChanged();

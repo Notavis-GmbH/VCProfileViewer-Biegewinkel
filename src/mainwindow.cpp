@@ -904,8 +904,10 @@ void MainWindow::onConnectClicked()
     m_sensorWorker->startCapture(ip, m_editPort->text().toUShort(), roi1, roi2);
     qInfo().noquote() << QString("[Sensor] Verbindungsversuch: %1:%2  ROI1=[%3..%4]  ROI2=[%5..%6]")
         .arg(ip).arg(port)
-        .arg(roi1.xMin,'f',1).arg(roi1.xMax,'f',1)
-        .arg(roi2.xMin,'f',1).arg(roi2.xMax,'f',1);
+        .arg(QString::number(roi1.xMin, 'f', 1))
+        .arg(QString::number(roi1.xMax, 'f', 1))
+        .arg(QString::number(roi2.xMin, 'f', 1))
+        .arg(QString::number(roi2.xMax, 'f', 1));
     statusBar()->showMessage("Verbinde mit " + ip + ":" + QString::number(port) + " …");
 }
 

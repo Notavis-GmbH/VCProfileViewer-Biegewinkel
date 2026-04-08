@@ -16,65 +16,57 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    # ── 2. Qt 6.8 via aqt mit explizitem Mirror ───────────────────────────────
-    #   Der Standard-Mirror (download.qt.io) ist derzeit für 6.7.x nicht
-    #   zuverlässig erreichbar. Wir geben einen alternativen Mirror vor und
-    #   nutzen Qt 6.8.1 (neueste stabile LTS).
-    - name: Install Qt 6 via aqt (mirror fallback)
+    # ── 2. Qt Cache prüfen ────────────────────────────────────────────────────
+    - name: Cache Qt 6.8.1
+      id: cache-qt
+      uses: actions/cache@v4
+      with:
+        path: C:\Qt
+        key: qt-6.8.1-win64-msvc2022-${{ runner.os }}
+
+    # ── 3. Qt 6.8.1 installieren (nur bei Cache-Miss) ─────────────────────────
+    - name: Install Qt 6.8.1 via aqt
+      if: steps.cache-qt.outputs.cache-hit != 'true'
       shell: pwsh
       run: |
-        pip install "aqtinstall==3.3.*"
+        pip install "aqtinstall==3.3.*" --quiet
 
-        # Primär: offizieller Qt-Mirror
-        $mirrors = @(
-          "https://download.qt.io/online/qtsdkrepository/",
-          "https://mirrors.dotsrc.org/qtproject/online/qtsdkrepository/",
-          "https://ftp.fau.de/qtproject/online/qtsdkrepository/"
-        )
+        # Qt Basis + Charts-Modul installieren
+        # Qt Charts ist in Qt 6 ein separates Modul (nicht im Basis-Paket)
+        python -m aqt install-qt windows desktop 6.8.1 win64_msvc2022_64 `
+          --outputdir "C:\Qt" `
+          --modules qtcharts
 
-        $success = $false
-        foreach ($mirror in $mirrors) {
-          Write-Host "Versuche Mirror: $mirror"
-          python -m aqt install-qt windows desktop 6.8.1 win64_msvc2022_64 `
-            --outputdir "${{ github.workspace }}\Qt" `
-            --base "$mirror" 2>&1
-          if ($LASTEXITCODE -eq 0) {
-            Write-Host "Erfolg mit Mirror: $mirror"
-            $success = $true
-            break
-          }
-          Write-Host "Mirror fehlgeschlagen, versuche naechsten..."
-        }
-        if (-not $success) { exit 1 }
-
-    - name: Set Qt environment variables
+    # ── 4. Qt-Umgebung setzen ─────────────────────────────────────────────────
+    - name: Configure Qt environment
       shell: pwsh
       run: |
-        $qtDir = "${{ github.workspace }}\Qt\6.8.1\msvc2022_64"
-        echo "Qt6_DIR=$qtDir\lib\cmake\Qt6" >> $env:GITHUB_ENV
-        echo "CMAKE_PREFIX_PATH=$qtDir" >> $env:GITHUB_ENV
-        echo "$qtDir\bin" >> $env:GITHUB_PATH
+        $qtBase = "C:\Qt\6.8.1\msvc2022_64"
+        echo "Qt6_DIR=$qtBase\lib\cmake\Qt6"   >> $env:GITHUB_ENV
+        echo "CMAKE_PREFIX_PATH=$qtBase"        >> $env:GITHUB_ENV
+        echo "$qtBase\bin"                      >> $env:GITHUB_PATH
 
-    # ── 3. MSVC2022 x64 aktivieren ────────────────────────────────────────────
+    # ── 5. MSVC2022 x64 aktivieren ────────────────────────────────────────────
     - name: Set up MSVC developer environment
       uses: ilammy/msvc-dev-cmd@v1
       with:
         arch: amd64
 
-    # ── 4. CMake konfigurieren ────────────────────────────────────────────────
+    # ── 6. CMake konfigurieren ────────────────────────────────────────────────
     - name: Configure CMake
       shell: pwsh
       run: |
         cmake -B build `
           -G "NMake Makefiles" `
           -DCMAKE_BUILD_TYPE=Release `
-          -DCMAKE_PREFIX_PATH="${{ env.CMAKE_PREFIX_PATH }}"
+          -DCMAKE_PREFIX_PATH="C:\Qt\6.8.1\msvc2022_64"
 
-    # ── 5. Bauen ──────────────────────────────────────────────────────────────
+    # ── 7. Bauen ──────────────────────────────────────────────────────────────
     - name: Build
+      shell: pwsh
       run: cmake --build build --config Release --parallel
 
-    # ── 6. windeployqt ────────────────────────────────────────────────────────
+    # ── 8. windeployqt ────────────────────────────────────────────────────────
     - name: Run windeployqt
       shell: pwsh
       run: |
@@ -85,7 +77,7 @@ jobs:
         echo "EXE_DIR=$(Split-Path $exePath)" >> $env:GITHUB_ENV
         windeployqt --release --no-translations "$exePath"
 
-    # ── 7. Portablen Ordner zusammenstellen ───────────────────────────────────
+    # ── 9. Portablen Ordner zusammenstellen ───────────────────────────────────
     - name: Assemble portable package
       shell: pwsh
       run: |
@@ -100,7 +92,7 @@ jobs:
         "VC3DProfileViewer v2.0`nBranch: ${{ github.ref_name }}`nCommit: $sha`nBuilt : $ts" |
           Out-File -Encoding utf8 "$pkg\VERSION.txt"
 
-    # ── 8. Artefakt hochladen (immer, 30 Tage) ────────────────────────────────
+    # ── 10. Artefakt hochladen (immer, 30 Tage) ───────────────────────────────
     - name: Upload build artifact
       uses: actions/upload-artifact@v4
       with:
@@ -108,7 +100,7 @@ jobs:
         path: VC3DProfileViewer_portable\
         retention-days: 30
 
-    # ── 9. Release ZIP + GitHub Release (nur main-Push) ──────────────────────
+    # ── 11. Release ZIP + GitHub Release (nur main-Push) ─────────────────────
     - name: Create release ZIP
       if: github.event_name == 'push' && github.ref == 'refs/heads/main'
       shell: pwsh
@@ -133,7 +125,7 @@ jobs:
           ZIP entpacken → `VC3DProfileViewer.exe` starten. Kein Installer nötig.
 
           ### Inhalt
-          - `VC3DProfileViewer.exe` + Qt6-DLLs (windeployqt)
+          - `VC3DProfileViewer.exe` + Qt 6.8.1 DLLs (windeployqt)
           - `Data/` – JSON-Aufzeichnungen hier ablegen
           - `Devices/` – Einstellungen (wird beim ersten Start erzeugt)
 

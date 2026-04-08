@@ -249,14 +249,24 @@ void ProfileWidget::updateProfile(const std::vector<ProfilePoint> &points)
         maxZ = std::max(maxZ, p.z_mm);
     }
 
+    // Block chart updates while replacing data to avoid flicker,
+    // then set axis ranges which also triggers a repaint.
+    m_chart->setUpdatesEnabled(false);
     m_profileSeries->replace(pts);
+    m_chart->setUpdatesEnabled(true);
 
+    // Always update axis range so Qt Charts redraws the series.
+    float marginX = (maxX - minX) * 0.05f + 1.0f;
+    float marginZ = (maxZ - minZ) * 0.10f + 1.0f;
     if (m_autoScale) {
-        float marginX = (maxX - minX) * 0.05f + 1.0f;
-        float marginZ = (maxZ - minZ) * 0.10f + 1.0f;
         m_axisX->setRange(minX - marginX, maxX + marginX);
         m_axisZ->setRange(minZ - marginZ, maxZ + marginZ);
+    } else {
+        // Force a minor nudge so Qt Charts notices the series changed
+        double xMin = m_axisX->min(), xMax = m_axisX->max();
+        m_axisX->setRange(xMin, xMax);
     }
+    m_chartView->viewport()->update();
 }
 
 void ProfileWidget::clearProfile()

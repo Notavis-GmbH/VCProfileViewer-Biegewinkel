@@ -352,8 +352,8 @@ void MainWindow::onConnectClicked()
     int     port = m_editPort->text().trimmed().toInt();
 
     RoiRect roi1, roi2;
-    roi1.xMin = m_roi1Start->value(); roi1.xMax = m_roi1End->value();
-    roi2.xMin = m_roi2Start->value(); roi2.xMax = m_roi2End->value();
+    roi1.xMin = m_roi1Start->value(); roi1.xMax = m_roi1End->value(); roi1.valid = (roi1.xMax > roi1.xMin);
+    roi2.xMin = m_roi2Start->value(); roi2.xMax = m_roi2End->value(); roi2.valid = (roi2.xMax > roi2.xMin);
 
     m_sensorWorker = new SensorWorker(this);
     connect(m_sensorWorker, &SensorWorker::profileReady,    this, &MainWindow::onSensorData);
@@ -425,7 +425,9 @@ void MainWindow::updateConnectButtons(bool connected)
 void MainWindow::onRoi1Changed()
 {
     RoiRect roi1; roi1.xMin = m_roi1Start->value(); roi1.xMax = m_roi1End->value();
+    roi1.valid = (roi1.xMax > roi1.xMin);
     RoiRect roi2; roi2.xMin = m_roi2Start->value(); roi2.xMax = m_roi2End->value();
+    roi2.valid = (roi2.xMax > roi2.xMin);
     m_profileWidget->setRoi(0, roi1);
     if (m_sensorWorker && m_sourceMode == SourceMode::LiveSensor)
         m_sensorWorker->updateRois(roi1, roi2);
@@ -434,7 +436,9 @@ void MainWindow::onRoi1Changed()
 void MainWindow::onRoi2Changed()
 {
     RoiRect roi1; roi1.xMin = m_roi1Start->value(); roi1.xMax = m_roi1End->value();
+    roi1.valid = (roi1.xMax > roi1.xMin);
     RoiRect roi2; roi2.xMin = m_roi2Start->value(); roi2.xMax = m_roi2End->value();
+    roi2.valid = (roi2.xMax > roi2.xMin);
     m_profileWidget->setRoi(1, roi2);
     if (m_sensorWorker && m_sourceMode == SourceMode::LiveSensor)
         m_sensorWorker->updateRois(roi1, roi2);
@@ -608,9 +612,9 @@ void MainWindow::loadSettings()
         m_sourceMode = SourceMode::JsonPlayback;
     }
 
-    // Sync ROIs to chart
-    { RoiRect r; r.xMin = m_roi1Start->value(); r.xMax = m_roi1End->value(); m_profileWidget->setRoi(0, r); }
-    { RoiRect r; r.xMin = m_roi2Start->value(); r.xMax = m_roi2End->value(); m_profileWidget->setRoi(1, r); }
+    // Sync ROIs to chart – valid=true so they are drawn immediately
+    { RoiRect r; r.xMin = m_roi1Start->value(); r.xMax = m_roi1End->value(); r.valid = (r.xMax > r.xMin); m_profileWidget->setRoi(0, r); }
+    { RoiRect r; r.xMin = m_roi2Start->value(); r.xMax = m_roi2End->value(); r.valid = (r.xMax > r.xMin); m_profileWidget->setRoi(1, r); }
 }
 
 void MainWindow::closeEvent(QCloseEvent *event)

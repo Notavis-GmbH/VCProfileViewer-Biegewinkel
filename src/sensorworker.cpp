@@ -2,6 +2,7 @@
 ** sensorworker.cpp
 ****************************************************************************/
 #include "sensorworker.h"
+#include "vcprotocol.h"  // must come before Qt headers to get winsock2 first
 #include <QMutexLocker>
 #include <QString>
 #include <QRegularExpression>

@@ -10,7 +10,9 @@
 #include <QString>
 #include <vector>
 #include "types.h"     // ProfilePoint, RoiRect (no Windows headers)
-#include "vcprotocol.h" // VcProtocol (includes winsock2 on Windows)
+// NOTE: vcprotocol.h includes winsock2.h which pollutes the namespace.
+// Forward-declare VcProtocol here; the real include goes in sensorworker.cpp only.
+class VcProtocol;
 
 struct AngleResult {
     bool    valid = false;

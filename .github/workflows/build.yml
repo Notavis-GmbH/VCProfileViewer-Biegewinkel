@@ -1,0 +1,138 @@
+name: Build VC3DProfileViewer (Qt MSVC2022)
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Alle Jobs laufen auf einem frischen Windows-Runner mit MSVC2022
+# ──────────────────────────────────────────────────────────────────────────────
+jobs:
+  build:
+    name: Build & Package (Windows x64)
+    runs-on: windows-2022
+
+    steps:
+    # ── 1. Code auschecken ────────────────────────────────────────────────────
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    # ── 2. Qt 6 (inkl. Qt Charts + Qt Network) installieren ──────────────────
+    - name: Install Qt 6
+      uses: jurplel/install-qt-action@v4
+      with:
+        version:      '6.7.3'          # aktuellste stabile Qt6-LTS
+        host:         'windows'
+        target:       'desktop'
+        arch:         'win64_msvc2022_64'
+        modules:      'qtcharts'        # Qt Charts ist separates Modul in Qt6
+        cache:        true              # Qt-Download cachen → schnellere Folge-Builds
+        cache-key-prefix: qt6-msvc2022
+
+    # ── 3. MSVC-Umgebung aktivieren ───────────────────────────────────────────
+    - name: Set up MSVC developer environment
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: amd64
+
+    # ── 4. CMake-Build (Release) ──────────────────────────────────────────────
+    - name: Configure CMake
+      run: |
+        cmake -B build `
+          -G "NMake Makefiles" `
+          -DCMAKE_BUILD_TYPE=Release `
+          -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}"
+
+    - name: Build
+      run: cmake --build build --config Release --parallel
+
+    # ── 5. windeployqt – alle Qt-DLLs, Plugins etc. ins Deployordner kopieren ─
+    - name: Run windeployqt
+      run: |
+        $exeDir = "build\bin\Release"
+        # Fallback falls EXE direkt in build\ landet
+        if (-not (Test-Path "$exeDir\VC3DProfileViewer.exe")) {
+          $exeDir = "build"
+        }
+        Write-Host "EXE folder: $exeDir"
+        windeployqt --release --no-translations `
+          "$exeDir\VC3DProfileViewer.exe"
+
+    # ── 6. Portable Paket zusammenstellen ─────────────────────────────────────
+    - name: Assemble portable package
+      shell: pwsh
+      run: |
+        $exeDir = "build\bin\Release"
+        if (-not (Test-Path "$exeDir\VC3DProfileViewer.exe")) {
+          $exeDir = "build"
+        }
+
+        $pkg = "VC3DProfileViewer_portable"
+        New-Item -ItemType Directory -Path $pkg -Force | Out-Null
+        New-Item -ItemType Directory -Path "$pkg\Data"    -Force | Out-Null
+        New-Item -ItemType Directory -Path "$pkg\Devices" -Force | Out-Null
+
+        # EXE + alle DLLs + Plugins aus windeployqt
+        Copy-Item -Path "$exeDir\*" -Destination $pkg -Recurse -Force
+
+        # README
+        Copy-Item README.txt $pkg -Force
+
+        # Versionsdatei für schnelle Identifikation
+        $sha = "${{ github.sha }}".Substring(0,7)
+        $ref = "${{ github.ref_name }}"
+        $ts  = Get-Date -Format "yyyy-MM-dd HH:mm UTC"
+        "VC3DProfileViewer v2.0`nBranch : $ref`nCommit : $sha`nBuilt  : $ts" `
+          | Out-File -Encoding utf8 "$pkg\VERSION.txt"
+
+        Write-Host "Package contents:"
+        Get-ChildItem $pkg -Recurse | Select-Object FullName
+
+    # ── 7. Artefakt hochladen (immer – auch bei PRs) ──────────────────────────
+    - name: Upload build artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: VC3DProfileViewer_portable_${{ github.sha }}
+        path: VC3DProfileViewer_portable\
+        retention-days: 30
+
+    # ── 8. GitHub Release erstellen (nur bei Push auf main) ──────────────────
+    - name: Create ZIP for release
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      shell: pwsh
+      run: |
+        $sha = "${{ github.sha }}".Substring(0,7)
+        Compress-Archive `
+          -Path "VC3DProfileViewer_portable\*" `
+          -DestinationPath "VC3DProfileViewer_v2.0_$sha.zip" `
+          -Force
+
+    - name: Create GitHub Release
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name:   build-${{ github.run_number }}
+        name:       "VC3DProfileViewer v2.0 – Build #${{ github.run_number }}"
+        body: |
+          ## Automatischer Build von `main`
+
+          **Commit:** `${{ github.sha }}`
+          **Build:**  #${{ github.run_number }}
+
+          ### Installation
+          ZIP entpacken → `VC3DProfileViewer.exe` doppelklicken.
+          Kein Installer erforderlich (portable).
+
+          ### Inhalt
+          - `VC3DProfileViewer.exe` + alle Qt6-DLLs
+          - `Data/` – JSON-Aufzeichnungen hier ablegen
+          - `Devices/` – Einstellungen (default.ini, wird beim ersten Start erzeugt)
+
+          ### Änderungen
+          Siehe [Commit-History](https://github.com/${{ github.repository }}/commits/main)
+        files: VC3DProfileViewer_v2.0_*.zip
+        draft:      false
+        prerelease: false
+        make_latest: true

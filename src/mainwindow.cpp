@@ -1276,16 +1276,16 @@ void MainWindow::refreshPresetCombo()
 
         // Build tooltip: IP + ROI-Bereiche + Methoden
         ps.beginGroup(g);
-        const QString ip    = ps.value("Sensor/IP",   "?").toString();
-        const QString port  = ps.value("Sensor/Port", "?").toString();
-        const double r1s    = ps.value("ROI1/Start",   0.0).toDouble();
-        const double r1e    = ps.value("ROI1/End",     0.0).toDouble();
-        const double r2s    = ps.value("ROI2/Start",   0.0).toDouble();
-        const double r2e    = ps.value("ROI2/End",     0.0).toDouble();
-        const int    m1idx  = ps.value("ROI1/Method",  0).toInt();
-        const int    m2idx  = ps.value("ROI2/Method",  0).toInt();
-        const int    mode   = ps.value("Source/Mode",  0).toInt();
-        const QString folder= ps.value("Playback/Folder", "").toString();
+        const QString ip    = ps.value("Sensor_IP",   "?").toString();
+        const QString port  = ps.value("Sensor_Port", "?").toString();
+        const double r1s    = ps.value("ROI1_Start",   0.0).toDouble();
+        const double r1e    = ps.value("ROI1_End",     0.0).toDouble();
+        const double r2s    = ps.value("ROI2_Start",   0.0).toDouble();
+        const double r2e    = ps.value("ROI2_End",     0.0).toDouble();
+        const int    m1idx  = ps.value("ROI1_Method",  0).toInt();
+        const int    m2idx  = ps.value("ROI2_Method",  0).toInt();
+        const int    mode   = ps.value("Source_Mode",  0).toInt();
+        const QString folder= ps.value("Playback_Folder", "").toString();
         ps.endGroup();
 
         static const char* kMethods[] = {"OLS", "RANSAC", "Hough", "Auto"};
@@ -1320,18 +1320,18 @@ void MainWindow::writePreset(const QString &name)
 {
     QSettings ps(presetsPath(), QSettings::IniFormat);
     ps.beginGroup(name);
-    ps.setValue("Sensor/IP",       m_editIp->text());
-    ps.setValue("Sensor/Port",     m_editPort->text());
-    ps.setValue("ROI1/Start",      m_roi1Start->value());
-    ps.setValue("ROI1/End",        m_roi1End->value());
-    ps.setValue("ROI1/Method",     m_roi1Method->currentIndex());
-    ps.setValue("ROI2/Start",      m_roi2Start->value());
-    ps.setValue("ROI2/End",        m_roi2End->value());
-    ps.setValue("ROI2/Method",     m_roi2Method->currentIndex());
-    ps.setValue("Playback/Folder", m_editFolder->text());
-    ps.setValue("Playback/Speed",  m_speedSlider->value());
-    ps.setValue("Source/Mode",     static_cast<int>(m_sourceMode));
-    ps.setValue("Log/Path",        m_editLogPath->text());
+    ps.setValue("Sensor_IP",       m_editIp->text());
+    ps.setValue("Sensor_Port",     m_editPort->text());
+    ps.setValue("ROI1_Start",      m_roi1Start->value());
+    ps.setValue("ROI1_End",        m_roi1End->value());
+    ps.setValue("ROI1_Method",     m_roi1Method->currentIndex());
+    ps.setValue("ROI2_Start",      m_roi2Start->value());
+    ps.setValue("ROI2_End",        m_roi2End->value());
+    ps.setValue("ROI2_Method",     m_roi2Method->currentIndex());
+    ps.setValue("Playback_Folder", m_editFolder->text());
+    ps.setValue("Playback_Speed",  m_speedSlider->value());
+    ps.setValue("Source_Mode",     static_cast<int>(m_sourceMode));
+    ps.setValue("Log_Path",        m_editLogPath->text());
     ps.endGroup();
     ps.sync();
 }
@@ -1344,23 +1344,23 @@ void MainWindow::applyPreset(const QString &name)
     m_presetLoading = true;
 
     ps.beginGroup(name);
-    m_editIp->setText(         ps.value("Sensor/IP",       "192.168.3.15").toString());
-    m_editPort->setText(       ps.value("Sensor/Port",     "1096").toString());
-    m_roi1Start->setValue(     ps.value("ROI1/Start",      -100.0).toDouble());
-    m_roi1End->setValue(       ps.value("ROI1/End",          0.0).toDouble());
-    m_roi1Method->setCurrentIndex(ps.value("ROI1/Method", 0).toInt());
-    m_roi2Start->setValue(     ps.value("ROI2/Start",        0.0).toDouble());
-    m_roi2End->setValue(       ps.value("ROI2/End",         100.0).toDouble());
-    m_roi2Method->setCurrentIndex(ps.value("ROI2/Method", 0).toInt());
-    const QString folder = ps.value("Playback/Folder", "").toString();
+    m_editIp->setText(         ps.value("Sensor_IP",       "192.168.3.15").toString());
+    m_editPort->setText(       ps.value("Sensor_Port",     "1096").toString());
+    m_roi1Start->setValue(     ps.value("ROI1_Start",      -100.0).toDouble());
+    m_roi1End->setValue(       ps.value("ROI1_End",          0.0).toDouble());
+    m_roi1Method->setCurrentIndex(ps.value("ROI1_Method", 0).toInt());
+    m_roi2Start->setValue(     ps.value("ROI2_Start",        0.0).toDouble());
+    m_roi2End->setValue(       ps.value("ROI2_End",         100.0).toDouble());
+    m_roi2Method->setCurrentIndex(ps.value("ROI2_Method", 0).toInt());
+    const QString folder = ps.value("Playback_Folder", "").toString();
     if (!folder.isEmpty()) m_editFolder->setText(folder);
-    m_speedSlider->setValue(   ps.value("Playback/Speed",   5).toInt());
+    m_speedSlider->setValue(   ps.value("Playback_Speed",   5).toInt());
     onSpeedSliderChanged(m_speedSlider->value());
-    const int mode = ps.value("Source/Mode", 0).toInt();
+    const int mode = ps.value("Source_Mode", 0).toInt();
     if (mode == 1) { m_rbPlayback->setChecked(true); m_sourceMode = SourceMode::JsonPlayback; }
     else           { m_rbLive->setChecked(true);     m_sourceMode = SourceMode::LiveSensor;   }
     applySourceMode();
-    const QString logPath = ps.value("Log/Path", "").toString();
+    const QString logPath = ps.value("Log_Path", "").toString();
     if (!logPath.isEmpty()) m_editLogPath->setText(logPath);
     ps.endGroup();
 
@@ -1500,15 +1500,8 @@ void MainWindow::loadSettings()
     dir.mkpath("Data");
     dir.mkpath("Logs");
 
-    if (!QFile::exists(path)) {
-        // Set a sensible default log path
-        QString defaultLog = QDir(QApplication::applicationDirPath()).filePath(
-            QString("Logs/MeasLog_%1.csv")
-                .arg(QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss")));
-        m_editLogPath->setText(defaultLog);
-        return;
-    }
-
+    // Load main settings if file exists (skip widget-fill if not, but still seed presets)
+    if (QFile::exists(path)) {
     QSettings s(path, QSettings::IniFormat);
     m_editIp->setText(s.value("Sensor/IP",   "192.168.3.15").toString());
     m_editPort->setText(s.value("Sensor/Port","1096").toString());
@@ -1543,6 +1536,13 @@ void MainWindow::loadSettings()
     // Sync ROIs to chart – valid=true so they are drawn immediately
     { RoiRect r; r.xMin = m_roi1Start->value(); r.xMax = m_roi1End->value(); r.valid = (r.xMax > r.xMin); m_profileWidget->setRoi(0, r); }
     { RoiRect r; r.xMin = m_roi2Start->value(); r.xMax = m_roi2End->value(); r.valid = (r.xMax > r.xMin); m_profileWidget->setRoi(1, r); }
+    } // end if(QFile::exists)
+    else {
+        // No settings file yet – set default log path
+        m_editLogPath->setText(QDir(QApplication::applicationDirPath()).filePath(
+            QString("Logs/MeasLog_%1.csv")
+                .arg(QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss"))));
+    }
 
     // Seed "TestData-Setup" template whenever the group is missing
     {
@@ -1555,18 +1555,18 @@ void MainWindow::loadSettings()
                     QString("Logs/MeasLog_%1.csv")
                         .arg(QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss")));
             ps.beginGroup("TestData-Setup");
-            ps.setValue("Sensor/IP",       "192.168.3.15");
-            ps.setValue("Sensor/Port",     "1096");
-            ps.setValue("ROI1/Start",      -44.0);
-            ps.setValue("ROI1/End",         -3.0);
-            ps.setValue("ROI1/Method",      3);    // Auto
-            ps.setValue("ROI2/Start",       18.0);
-            ps.setValue("ROI2/End",         55.0);
-            ps.setValue("ROI2/Method",      3);    // Auto
-            ps.setValue("Playback/Folder", testDataPath);
-            ps.setValue("Playback/Speed",  5);     // 1.0×
-            ps.setValue("Source/Mode",     1);     // JSON Wiedergabe
-            ps.setValue("Log/Path",        defaultLogPath);
+            ps.setValue("Sensor_IP",       "192.168.3.15");
+            ps.setValue("Sensor_Port",     "1096");
+            ps.setValue("ROI1_Start",      -44.0);
+            ps.setValue("ROI1_End",         -3.0);
+            ps.setValue("ROI1_Method",      3);    // Auto
+            ps.setValue("ROI2_Start",       18.0);
+            ps.setValue("ROI2_End",         55.0);
+            ps.setValue("ROI2_Method",      3);    // Auto
+            ps.setValue("Playback_Folder", testDataPath);
+            ps.setValue("Playback_Speed",  5);     // 1.0×
+            ps.setValue("Source_Mode",     1);     // JSON Wiedergabe
+            ps.setValue("Log_Path",        defaultLogPath);
             ps.endGroup();
             ps.sync();
         }

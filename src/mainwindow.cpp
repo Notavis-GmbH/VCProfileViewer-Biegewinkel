@@ -504,6 +504,10 @@ void MainWindow::buildUi()
 
     leftLayout->addWidget(sourceGroup);
 
+    // Preset group (Kopf)
+    m_presetGroup = new QGroupBox("Typverwaltung");
+    buildPresetGroup(leftPanel, leftLayout);
+
     // Sensor group
     m_sensorGroup = new QGroupBox("Sensor (Live)");
     buildSensorGroup(leftPanel, leftLayout);
@@ -545,10 +549,6 @@ void MainWindow::buildUi()
 
     // Log group
     buildLogGroup(leftPanel, leftLayout);
-
-    // Preset group
-    m_presetGroup = new QGroupBox("Typverwaltung");
-    buildPresetGroup(leftPanel, leftLayout);
 
     leftLayout->addStretch();
 
@@ -757,7 +757,7 @@ void MainWindow::buildPresetGroup(QWidget * /*parent*/, QVBoxLayout *layout)
 
     layout->addWidget(m_presetGroup);
 
-    connect(m_cmbPresets,    QOverload<int>::of(&QComboBox::currentIndexChanged),
+    connect(m_cmbPresets,    QOverload<int>::of(&QComboBox::activated),
             this, &MainWindow::onPresetSelected);
     connect(m_btnPresetSave, &QPushButton::clicked, this, &MainWindow::onPresetSave);
     connect(m_btnPresetRen,  &QPushButton::clicked, this, &MainWindow::onPresetRename);
@@ -1375,8 +1375,10 @@ void MainWindow::applyPreset(const QString &name)
 
 void MainWindow::onPresetSelected(int index)
 {
-    if (m_presetLoading || index <= 0) return;  // 0 = placeholder
-    applyPreset(m_cmbPresets->itemText(index));
+    if (m_presetLoading || index <= 0) return;  // 0 = "– Typ wählen –" placeholder
+    const QString name = m_cmbPresets->itemText(index);
+    if (!name.isEmpty())
+        applyPreset(name);
 }
 
 void MainWindow::onPresetSave()
@@ -1542,34 +1544,35 @@ void MainWindow::loadSettings()
     { RoiRect r; r.xMin = m_roi1Start->value(); r.xMax = m_roi1End->value(); r.valid = (r.xMax > r.xMin); m_profileWidget->setRoi(0, r); }
     { RoiRect r; r.xMin = m_roi2Start->value(); r.xMax = m_roi2End->value(); r.valid = (r.xMax > r.xMin); m_profileWidget->setRoi(1, r); }
 
-    // Seed default "TestData-Setup" template if Presets.ini doesn't exist yet
-    if (!QFile::exists(presetsPath())) {
-        const QString testDataPath =
-            QDir(QApplication::applicationDirPath()).filePath("TestData");
-        const QString defaultLogPath =
-            QDir(QApplication::applicationDirPath()).filePath(
-                QString("Logs/MeasLog_%1.csv")
-                    .arg(QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss")));
-
+    // Seed "TestData-Setup" template whenever the group is missing
+    {
         QSettings ps(presetsPath(), QSettings::IniFormat);
-        ps.beginGroup("TestData-Setup");
-        ps.setValue("Sensor/IP",       "192.168.3.15");
-        ps.setValue("Sensor/Port",     "1096");
-        ps.setValue("ROI1/Start",      -44.0);
-        ps.setValue("ROI1/End",         -3.0);
-        ps.setValue("ROI1/Method",      3);    // Auto
-        ps.setValue("ROI2/Start",       18.0);
-        ps.setValue("ROI2/End",         55.0);
-        ps.setValue("ROI2/Method",      3);    // Auto
-        ps.setValue("Playback/Folder", testDataPath);
-        ps.setValue("Playback/Speed",  5);     // 1.0×
-        ps.setValue("Source/Mode",     1);     // JSON Wiedergabe
-        ps.setValue("Log/Path",        defaultLogPath);
-        ps.endGroup();
-        ps.sync();
+        if (!ps.childGroups().contains("TestData-Setup")) {
+            const QString testDataPath =
+                QDir(QApplication::applicationDirPath()).filePath("TestData");
+            const QString defaultLogPath =
+                QDir(QApplication::applicationDirPath()).filePath(
+                    QString("Logs/MeasLog_%1.csv")
+                        .arg(QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss")));
+            ps.beginGroup("TestData-Setup");
+            ps.setValue("Sensor/IP",       "192.168.3.15");
+            ps.setValue("Sensor/Port",     "1096");
+            ps.setValue("ROI1/Start",      -44.0);
+            ps.setValue("ROI1/End",         -3.0);
+            ps.setValue("ROI1/Method",      3);    // Auto
+            ps.setValue("ROI2/Start",       18.0);
+            ps.setValue("ROI2/End",         55.0);
+            ps.setValue("ROI2/Method",      3);    // Auto
+            ps.setValue("Playback/Folder", testDataPath);
+            ps.setValue("Playback/Speed",  5);     // 1.0×
+            ps.setValue("Source/Mode",     1);     // JSON Wiedergabe
+            ps.setValue("Log/Path",        defaultLogPath);
+            ps.endGroup();
+            ps.sync();
+        }
     }
 
-    // Populate preset combo (Presets.ini may not exist yet – that's fine)
+    // Populate preset combo
     refreshPresetCombo();
 }
 

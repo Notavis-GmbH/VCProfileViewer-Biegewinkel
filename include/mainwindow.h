@@ -10,6 +10,7 @@
 #include <QSlider>
 #include <QCheckBox>
 #include <QToolButton>
+#include <QComboBox>
 #include <QSettings>
 #include <memory>
 
@@ -98,8 +99,10 @@ private:
     QGroupBox      *m_roiGroup     = nullptr;
     QDoubleSpinBox *m_roi1Start    = nullptr;
     QDoubleSpinBox *m_roi1End      = nullptr;
+    QComboBox      *m_roi1Method   = nullptr;   // OLS / RANSAC / Hough
     QDoubleSpinBox *m_roi2Start    = nullptr;
     QDoubleSpinBox *m_roi2End      = nullptr;
+    QComboBox      *m_roi2Method   = nullptr;
 
     // Result display
     QLabel         *m_lblAngle     = nullptr;

@@ -3,6 +3,13 @@
 // Shared data types – no Windows headers included here
 // so this file is safe to include from Qt widget headers
 
+// Line-fitting algorithm selection (per ROI)
+enum class FitMethod {
+    OLS   = 0,   // Ordinary Least Squares  – fast, optimal for clean data
+    RANSAC = 1,  // Random Sample Consensus – robust against outliers / gaps
+    Hough  = 2   // Hough Transform         – robust, handles fragmented lines
+};
+
 struct ProfilePoint {
     float x_mm;
     float z_mm;
@@ -25,7 +32,8 @@ struct FitLine {
     double xMin        = 0.0;   // draw range (= ROI x-bounds)
     double xMax        = 0.0;
     double phi         = 0.0;   // angle in degrees (atan(slope))
-    double rmsResidual = 0.0;   // root-mean-square residual [mm]
-    double maxResidual = 0.0;   // maximum absolute residual [mm]
-    bool   valid       = false;
+    double    rmsResidual = 0.0;   // root-mean-square residual [mm]
+    double    maxResidual = 0.0;   // maximum absolute residual [mm]
+    FitMethod method      = FitMethod::OLS;
+    bool      valid       = false;
 };

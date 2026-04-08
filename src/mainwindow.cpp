@@ -29,6 +29,8 @@
 #include <cmath>
 #include <numeric>
 #include <utility>
+#include <random>
+#include <algorithm>
 
 // ──────────────────────────────────────────────────────────────────────────────
 //  Local helper: least-squares line fit through profile points inside a ROI
@@ -80,6 +82,240 @@ static FitLine fitLineInRoi(const std::vector<ProfilePoint> &pts,
     fl.rmsResidual = std::sqrt(sumSq / n);
     fl.valid       = true;
     return fl;
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+//  Shared: fill residuals + rms/max from a known slope/intercept
+// ──────────────────────────────────────────────────────────────────────────────
+static void computeResiduals(FitLine &fl,
+                              const std::vector<double> &xs,
+                              const std::vector<double> &zs,
+                              std::vector<std::pair<double,double>> *out)
+{
+    if (out) out->clear();
+    double sumSq = 0.0;
+    for (size_t i = 0; i < xs.size(); ++i) {
+        double res = std::abs(zs[i] - (fl.slope * xs[i] + fl.intercept));
+        sumSq += res * res;
+        fl.maxResidual = std::max(fl.maxResidual, res);
+        if (out) out->emplace_back(xs[i], res);
+    }
+    fl.rmsResidual = xs.empty() ? 0.0 : std::sqrt(sumSq / xs.size());
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+//  RANSAC line fit
+//  Iteratively picks 2 random points, counts inliers within threshold,
+//  then refines the best consensus set with OLS.
+//  threshold_mm: inlier distance from line [mm]  (default 0.5 mm)
+//  iterations:   number of random trials         (default 200)
+// ──────────────────────────────────────────────────────────────────────────────
+static FitLine ransacLineInRoi(const std::vector<ProfilePoint> &pts,
+                                const RoiRect &roi,
+                                std::vector<std::pair<double,double>> *residualsOut = nullptr,
+                                double threshMm = 0.5,
+                                int    iterations = 200)
+{
+    FitLine fl;
+    if (!roi.valid) return fl;
+
+    std::vector<double> xs, zs;
+    for (const auto &p : pts)
+        if (p.x_mm >= roi.xMin && p.x_mm <= roi.xMax)
+        { xs.push_back(p.x_mm); zs.push_back(p.z_mm); }
+
+    const int N = static_cast<int>(xs.size());
+    if (N < 4) return fl;   // need at least 4 for meaningful result
+
+    std::mt19937 rng(42);   // deterministic seed – same result every frame
+    std::uniform_int_distribution<int> dist(0, N - 1);
+
+    int    bestCount  = 0;
+    double bestSlope  = 0.0, bestIntercept = 0.0;
+
+    for (int iter = 0; iter < iterations; ++iter) {
+        // Sample 2 distinct points
+        int a = dist(rng), b = dist(rng);
+        while (b == a) b = dist(rng);
+
+        double dx = xs[b] - xs[a];
+        if (std::abs(dx) < 1e-9) continue;   // vertical sample – skip
+
+        double s  = (zs[b] - zs[a]) / dx;
+        double ic = zs[a] - s * xs[a];
+
+        // Count inliers
+        int count = 0;
+        for (int i = 0; i < N; ++i) {
+            double res = std::abs(zs[i] - (s * xs[i] + ic));
+            if (res <= threshMm) ++count;
+        }
+        if (count > bestCount) {
+            bestCount = count;  bestSlope = s;  bestIntercept = ic;
+        }
+    }
+
+    if (bestCount < 2) return fl;
+
+    // Refine with OLS on the inlier set
+    std::vector<double> ixs, izs;
+    ixs.reserve(bestCount);  izs.reserve(bestCount);
+    for (int i = 0; i < N; ++i) {
+        double res = std::abs(zs[i] - (bestSlope * xs[i] + bestIntercept));
+        if (res <= threshMm) { ixs.push_back(xs[i]); izs.push_back(zs[i]); }
+    }
+
+    double n = static_cast<double>(ixs.size());
+    double sumX = 0, sumZ = 0, sumXX = 0, sumXZ = 0;
+    for (size_t i = 0; i < ixs.size(); ++i) {
+        sumX += ixs[i]; sumZ += izs[i];
+        sumXX += ixs[i]*ixs[i]; sumXZ += ixs[i]*izs[i];
+    }
+    double denom = n*sumXX - sumX*sumX;
+    if (std::abs(denom) < 1e-12) return fl;
+
+    fl.slope     = (n*sumXZ - sumX*sumZ) / denom;
+    fl.intercept = (sumZ - fl.slope * sumX) / n;
+    fl.xMin      = roi.xMin;  fl.xMax = roi.xMax;
+    fl.phi       = std::atan(fl.slope) * 180.0 / M_PI;
+    fl.method    = FitMethod::RANSAC;
+    computeResiduals(fl, xs, zs, residualsOut);
+    fl.valid = true;
+    return fl;
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+//  Hough Transform line fit
+//  Discretises (slope, intercept) space via the normal parametrisation
+//  (rho, theta). Finds the peak bin, then refines with OLS on all points
+//  within threshMm of the Hough line.
+//
+//  thetaBins: angular resolution of accumulator (default 360 = 0.5° steps)
+//  rhoBins:   rho resolution (default 400 bins over the data range)
+//  threshMm:  inlier band for OLS refinement [mm]
+// ──────────────────────────────────────────────────────────────────────────────
+static FitLine houghLineInRoi(const std::vector<ProfilePoint> &pts,
+                               const RoiRect &roi,
+                               std::vector<std::pair<double,double>> *residualsOut = nullptr,
+                               int    thetaBins = 360,
+                               int    rhoBins   = 400,
+                               double threshMm  = 0.5)
+{
+    FitLine fl;
+    if (!roi.valid) return fl;
+
+    std::vector<double> xs, zs;
+    for (const auto &p : pts)
+        if (p.x_mm >= roi.xMin && p.x_mm <= roi.xMax)
+        { xs.push_back(p.x_mm); zs.push_back(p.z_mm); }
+
+    const int N = static_cast<int>(xs.size());
+    if (N < 4) return fl;
+
+    // Normalise coordinates to [-1, 1] for numerical stability
+    double xc = 0.0, zc = 0.0;
+    for (int i = 0; i < N; ++i) { xc += xs[i]; zc += zs[i]; }
+    xc /= N;  zc /= N;
+
+    double xScale = 1.0, zScale = 1.0;
+    for (int i = 0; i < N; ++i) {
+        xScale = std::max(xScale, std::abs(xs[i] - xc));
+        zScale = std::max(zScale, std::abs(zs[i] - zc));
+    }
+
+    // rho range in normalised coords
+    const double rhoMax = std::sqrt(2.0);   // max |rho| for unit circle
+    const double rhoStep  = 2.0 * rhoMax / rhoBins;
+    const double thetaStep = M_PI / thetaBins;
+
+    // Accumulator (flat vector)
+    std::vector<int> acc(static_cast<size_t>(thetaBins * rhoBins), 0);
+
+    for (int i = 0; i < N; ++i) {
+        double xn = (xs[i] - xc) / xScale;
+        double zn = (zs[i] - zc) / zScale;
+        for (int t = 0; t < thetaBins; ++t) {
+            double theta = t * thetaStep;
+            double rho   = xn * std::cos(theta) + zn * std::sin(theta);
+            int    rBin  = static_cast<int>((rho + rhoMax) / rhoStep);
+            if (rBin >= 0 && rBin < rhoBins)
+                ++acc[static_cast<size_t>(t * rhoBins + rBin)];
+        }
+    }
+
+    // Find peak bin
+    auto peakIt = std::max_element(acc.begin(), acc.end());
+    int  peakIdx  = static_cast<int>(peakIt - acc.begin());
+    int  peakT    = peakIdx / rhoBins;
+    int  peakR    = peakIdx % rhoBins;
+
+    double theta = peakT * thetaStep;
+    double rho   = (peakR * rhoStep + rhoStep * 0.5) - rhoMax;
+
+    // Convert (rho, theta) in normalised space back to (slope, intercept) in mm
+    // Line: xn*cos(t) + zn*sin(t) = rho
+    // If sin(theta) != 0:  zn = (rho - xn*cos(t)) / sin(t)
+    //   => z*zScale+zc = [(rho - (x-xc)/xScale * cos(t)) / sin(t)] * zScale + zc
+    double sinT = std::sin(theta);
+    double cosT = std::cos(theta);
+
+    double slope_n, intercept_n;  // in normalised coords
+    if (std::abs(sinT) > 1e-6) {
+        slope_n     = -cosT / sinT;
+        intercept_n =  rho  / sinT;
+    } else {
+        // Near-vertical: line is almost x = const – fallback to OLS
+        return fl;
+    }
+
+    // De-normalise: zn = slope_n * xn + intercept_n
+    //               (z-zc)/zScale = slope_n * (x-xc)/xScale + intercept_n
+    //               z = slope_n*(zScale/xScale)*x
+    //                 + intercept_n*zScale - slope_n*(zScale/xScale)*xc + zc
+    fl.slope     = slope_n * (zScale / xScale);
+    fl.intercept = intercept_n * zScale - fl.slope * xc + zc;
+    fl.xMin      = roi.xMin;  fl.xMax = roi.xMax;
+    fl.phi       = std::atan(fl.slope) * 180.0 / M_PI;
+    fl.method    = FitMethod::Hough;
+
+    // OLS refinement on Hough inliers
+    std::vector<double> ixs, izs;
+    for (int i = 0; i < N; ++i) {
+        double res = std::abs(zs[i] - (fl.slope*xs[i] + fl.intercept));
+        if (res <= threshMm) { ixs.push_back(xs[i]); izs.push_back(zs[i]); }
+    }
+    if (ixs.size() >= 2) {
+        double n = static_cast<double>(ixs.size());
+        double sX=0,sZ=0,sXX=0,sXZ=0;
+        for (size_t i=0;i<ixs.size();++i){
+            sX+=ixs[i]; sZ+=izs[i]; sXX+=ixs[i]*ixs[i]; sXZ+=ixs[i]*izs[i];
+        }
+        double d = n*sXX - sX*sX;
+        if (std::abs(d) > 1e-12) {
+            fl.slope     = (n*sXZ - sX*sZ) / d;
+            fl.intercept = (sZ - fl.slope*sX) / n;
+            fl.phi       = std::atan(fl.slope) * 180.0 / M_PI;
+        }
+    }
+
+    computeResiduals(fl, xs, zs, residualsOut);
+    fl.valid = true;
+    return fl;
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+//  Dispatch: call the right algorithm based on FitMethod
+// ──────────────────────────────────────────────────────────────────────────────
+static FitLine fitLine(const std::vector<ProfilePoint> &pts,
+                       const RoiRect &roi,
+                       FitMethod method,
+                       std::vector<std::pair<double,double>> *residualsOut = nullptr)
+{
+    switch (method) {
+        case FitMethod::RANSAC: return ransacLineInRoi(pts, roi, residualsOut);
+        case FitMethod::Hough:  return houghLineInRoi (pts, roi, residualsOut);
+        default:                return fitLineInRoi   (pts, roi, residualsOut);
+    }
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -257,6 +493,13 @@ void MainWindow::buildRoiGroup(QWidget * /*parent*/, QVBoxLayout *layout)
     form->addRow("Start:", m_roi1Start);
     form->addRow("Ende:",  m_roi1End);
 
+    m_roi1Method = new QComboBox;
+    m_roi1Method->addItem("OLS");
+    m_roi1Method->addItem("RANSAC");
+    m_roi1Method->addItem("Hough");
+    m_roi1Method->setToolTip("Linienfinder für ROI 1:\nOLS – Kleinste Quadrate (schnell)\nRANSAC – Ausreißer-robust\nHough – Lücken/Artefakt-robust");
+    form->addRow("Methode:", m_roi1Method);
+
     // Separator
     QFrame *sep = new QFrame;
     sep->setFrameShape(QFrame::HLine);
@@ -280,6 +523,13 @@ void MainWindow::buildRoiGroup(QWidget * /*parent*/, QVBoxLayout *layout)
     m_roi2End->setValue(100.0);
     form->addRow("Start:", m_roi2Start);
     form->addRow("Ende:",  m_roi2End);
+
+    m_roi2Method = new QComboBox;
+    m_roi2Method->addItem("OLS");
+    m_roi2Method->addItem("RANSAC");
+    m_roi2Method->addItem("Hough");
+    m_roi2Method->setToolTip("Linienfinder für ROI 2:\nOLS – Kleinste Quadrate (schnell)\nRANSAC – Ausreißer-robust\nHough – Lücken/Artefakt-robust");
+    form->addRow("Methode:", m_roi2Method);
 
     QLabel *lblHint = new QLabel("Tipp: ROI auch per Maus-Drag im Profil ziehen");
     lblHint->setStyleSheet("color:#666; font-size:10px;");
@@ -633,22 +883,36 @@ void MainWindow::computeAndDisplayFitLines(const std::vector<ProfilePoint> &pts)
     roi2.xMin = m_roi2Start->value(); roi2.xMax = m_roi2End->value();
     roi2.valid = (roi2.xMax > roi2.xMin);
 
+    auto m1 = static_cast<FitMethod>(m_roi1Method->currentIndex());
+    auto m2 = static_cast<FitMethod>(m_roi2Method->currentIndex());
+
     std::vector<std::pair<double,double>> res1, res2;
-    FitLine fl1 = fitLineInRoi(pts, roi1, &res1);
-    FitLine fl2 = fitLineInRoi(pts, roi2, &res2);
+    FitLine fl1 = fitLine(pts, roi1, m1, &res1);
+    FitLine fl2 = fitLine(pts, roi2, m2, &res2);
 
     m_profileWidget->updateFitLines(fl1, fl2, res1, res2);
     updateAngleDisplay(fl1, fl2);
 
-    // Show RMS residuals in status bar
+    // Method name helper
+    auto methodName = [](FitMethod m) -> QString {
+        switch (m) {
+            case FitMethod::RANSAC: return QStringLiteral("RANSAC");
+            case FitMethod::Hough:  return QStringLiteral("Hough");
+            default:                return QStringLiteral("OLS");
+        }
+    };
+
+    // Show RMS residuals + method in status bar
     if (fl1.valid || fl2.valid) {
         QString msg;
         if (fl1.valid)
-            msg += QString("ROI1: φ=%1°  RMS=%2μm")
+            msg += QString("ROI1[%1]: φ=%2°  RMS=%3μm")
+                   .arg(methodName(m1))
                    .arg(fl1.phi, 0,'f',2)
                    .arg(fl1.rmsResidual * 1000.0, 0,'f',1);
         if (fl2.valid)
-            msg += QString("   ROI2: φ=%1°  RMS=%2μm")
+            msg += QString("   ROI2[%1]: φ=%2°  RMS=%3μm")
+                   .arg(methodName(m2))
                    .arg(fl2.phi, 0,'f',2)
                    .arg(fl2.rmsResidual * 1000.0, 0,'f',1);
         statusBar()->showMessage(msg);
@@ -704,6 +968,8 @@ void MainWindow::saveSettings()
     s.setValue("ROI1/End",       m_roi1End->value());
     s.setValue("ROI2/Start",     m_roi2Start->value());
     s.setValue("ROI2/End",       m_roi2End->value());
+    s.setValue("ROI1/Method",    m_roi1Method->currentIndex());
+    s.setValue("ROI2/Method",    m_roi2Method->currentIndex());
     s.setValue("Playback/Folder",m_editFolder->text());
     s.setValue("Playback/Speed", m_speedSlider->value());
     s.setValue("Source/Mode",    static_cast<int>(m_sourceMode));
@@ -727,6 +993,8 @@ void MainWindow::loadSettings()
     m_roi1End->setValue(s.value("ROI1/End",       0.0).toDouble());
     m_roi2Start->setValue(s.value("ROI2/Start",   0.0).toDouble());
     m_roi2End->setValue(s.value("ROI2/End",      100.0).toDouble());
+    m_roi1Method->setCurrentIndex(s.value("ROI1/Method", 0).toInt());
+    m_roi2Method->setCurrentIndex(s.value("ROI2/Method", 0).toInt());
 
     QString folder = s.value("Playback/Folder", "").toString();
     if (!folder.isEmpty()) m_editFolder->setText(folder);

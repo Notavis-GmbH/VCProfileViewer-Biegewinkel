@@ -5,9 +5,23 @@
 
 // Line-fitting algorithm selection (per ROI)
 enum class FitMethod {
-    OLS   = 0,   // Ordinary Least Squares  – fast, optimal for clean data
+    OLS    = 0,  // Ordinary Least Squares  – fast, optimal for clean data
     RANSAC = 1,  // Random Sample Consensus – robust against outliers / gaps
-    Hough  = 2   // Hough Transform         – robust, handles fragmented lines
+    Hough  = 2,  // Hough Transform         – robust, handles fragmented lines
+    Auto   = 3   // Automatic selection based on inlier ratio + RMS heuristic
+};
+
+// Result of the automatic method selection heuristic
+struct AutoSelectInfo {
+    FitMethod chosen    = FitMethod::OLS;
+    double    olsRms    = 0.0;   // OLS  RMS residual [mm]
+    double    ransacRms = 0.0;   // RANSAC RMS on ALL points [mm]
+    double    houghRms  = 0.0;   // Hough  RMS on ALL points [mm]
+    double    inlierRatioRansac = 0.0;  // fraction of points within RANSAC threshold
+    double    inlierRatioHough  = 0.0;  // fraction of points within Hough threshold
+    // Human-readable reason string (shown in tooltip / log)
+    // e.g.  "RANSAC: inlier=0.72 < 0.85  (outliers detected)"
+    char reason[128] = {};
 };
 
 struct ProfilePoint {
@@ -34,6 +48,7 @@ struct FitLine {
     double phi         = 0.0;   // angle in degrees (atan(slope))
     double    rmsResidual = 0.0;   // root-mean-square residual [mm]
     double    maxResidual = 0.0;   // maximum absolute residual [mm]
-    FitMethod method      = FitMethod::OLS;
-    bool      valid       = false;
+    FitMethod    method         = FitMethod::OLS;
+    AutoSelectInfo autoInfo;         // filled only when method==Auto was requested
+    bool           valid          = false;
 };

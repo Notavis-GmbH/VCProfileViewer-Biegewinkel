@@ -99,10 +99,12 @@ private:
     QGroupBox      *m_roiGroup     = nullptr;
     QDoubleSpinBox *m_roi1Start    = nullptr;
     QDoubleSpinBox *m_roi1End      = nullptr;
-    QComboBox      *m_roi1Method   = nullptr;   // OLS / RANSAC / Hough
+    QComboBox      *m_roi1Method   = nullptr;   // OLS / RANSAC / Hough / Auto
+    QLabel         *m_lblMethod1   = nullptr;   // shows chosen method in Auto mode
     QDoubleSpinBox *m_roi2Start    = nullptr;
     QDoubleSpinBox *m_roi2End      = nullptr;
     QComboBox      *m_roi2Method   = nullptr;
+    QLabel         *m_lblMethod2   = nullptr;   // shows chosen method in Auto mode
 
     // Result display
     QLabel         *m_lblAngle     = nullptr;

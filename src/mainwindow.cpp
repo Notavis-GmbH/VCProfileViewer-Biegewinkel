@@ -304,6 +304,119 @@ static FitLine houghLineInRoi(const std::vector<ProfilePoint> &pts,
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
+//  Auto-select: run all three methods, choose based on inlier ratio + RMS
+//
+//  Decision thresholds (all configurable via constants below):
+//    inlierRatio ≥ AUTO_INLIER_OLS     → OLS   (clean data)
+//    inlierRatio ≥ AUTO_INLIER_RANSAC  → RANSAC (some outliers)
+//    inlierRatio <  AUTO_INLIER_RANSAC → Hough  (fragmented / many gaps)
+//  Additional override: if RANSAC RMS > OLS RMS * AUTO_RMS_FACTOR → Hough
+// ──────────────────────────────────────────────────────────────────────────────
+static constexpr double AUTO_INLIER_OLS    = 0.90;  // ≥90% inliers → OLS
+static constexpr double AUTO_INLIER_RANSAC = 0.60;  // ≥60% inliers → RANSAC, else Hough
+static constexpr double AUTO_THRESH_MM     = 0.50;  // inlier band [mm]
+static constexpr double AUTO_RMS_FACTOR    = 1.50;  // RANSAC/OLS RMS ratio for Hough fallback
+
+static FitLine autoFitLine(const std::vector<ProfilePoint> &pts,
+                           const RoiRect &roi,
+                           std::vector<std::pair<double,double>> *residualsOut = nullptr)
+{
+    if (!roi.valid) return FitLine{};
+
+    // Collect ROI points once
+    std::vector<double> xs, zs;
+    for (const auto &p : pts)
+        if (p.x_mm >= roi.xMin && p.x_mm <= roi.xMax)
+        { xs.push_back(p.x_mm); zs.push_back(p.z_mm); }
+
+    const int N = static_cast<int>(xs.size());
+    if (N < 4) return FitLine{};
+
+    // ── Step 1: OLS ───────────────────────────────────────────────────────────
+    FitLine olsFl = fitLineInRoi(pts, roi, nullptr);
+    if (!olsFl.valid) return FitLine{};
+
+    // Count OLS inliers
+    int olsInliers = 0;
+    for (int i = 0; i < N; ++i) {
+        double res = std::abs(zs[i] - (olsFl.slope * xs[i] + olsFl.intercept));
+        if (res <= AUTO_THRESH_MM) ++olsInliers;
+    }
+    double inlierRatioOls = static_cast<double>(olsInliers) / N;
+
+    AutoSelectInfo info;
+    info.olsRms = olsFl.rmsResidual;
+    info.inlierRatioRansac = inlierRatioOls;  // reused below
+
+    // ── Step 2: decide ───────────────────────────────────────────────────────
+    if (inlierRatioOls >= AUTO_INLIER_OLS) {
+        // Clean data – OLS is optimal
+        info.chosen = FitMethod::OLS;
+        std::snprintf(info.reason, sizeof(info.reason),
+            "OLS: inlier=%.2f ≥ %.2f (sauberes Profil)",
+            inlierRatioOls, AUTO_INLIER_OLS);
+        FitLine fl = fitLineInRoi(pts, roi, residualsOut);
+        fl.method   = FitMethod::OLS;
+        fl.autoInfo = info;
+        return fl;
+    }
+
+    // Need RANSAC or Hough – run RANSAC to get its RMS for comparison
+    FitLine ransacFl = ransacLineInRoi(pts, roi, nullptr);
+    info.ransacRms = ransacFl.valid ? ransacFl.rmsResidual : 1e9;
+
+    // Count RANSAC inliers with the refined RANSAC line
+    int ransacInliers = 0;
+    if (ransacFl.valid) {
+        for (int i = 0; i < N; ++i) {
+            double res = std::abs(zs[i] - (ransacFl.slope * xs[i] + ransacFl.intercept));
+            if (res <= AUTO_THRESH_MM) ++ransacInliers;
+        }
+    }
+    info.inlierRatioRansac = static_cast<double>(ransacInliers) / N;
+
+    bool useHough = (inlierRatioOls < AUTO_INLIER_RANSAC);
+    // Also fall back to Hough if RANSAC didn’t improve over OLS significantly
+    if (!useHough && ransacFl.valid &&
+        ransacFl.rmsResidual > olsFl.rmsResidual * AUTO_RMS_FACTOR)
+        useHough = true;
+
+    if (!useHough) {
+        // RANSAC
+        info.chosen = FitMethod::RANSAC;
+        std::snprintf(info.reason, sizeof(info.reason),
+            "RANSAC: inlier(OLS)=%.2f < %.2f, inlier(RANSAC)=%.2f",
+            inlierRatioOls, AUTO_INLIER_OLS, info.inlierRatioRansac);
+        FitLine fl = ransacLineInRoi(pts, roi, residualsOut);
+        fl.method   = FitMethod::RANSAC;
+        fl.autoInfo = info;
+        return fl;
+    }
+
+    // Hough
+    FitLine houghFl = houghLineInRoi(pts, roi, nullptr);
+    info.houghRms = houghFl.valid ? houghFl.rmsResidual : 1e9;
+
+    int houghInliers = 0;
+    if (houghFl.valid) {
+        for (int i = 0; i < N; ++i) {
+            double res = std::abs(zs[i] - (houghFl.slope * xs[i] + houghFl.intercept));
+            if (res <= AUTO_THRESH_MM) ++houghInliers;
+        }
+    }
+    info.inlierRatioHough = static_cast<double>(houghInliers) / N;
+    info.chosen = FitMethod::Hough;
+    std::snprintf(info.reason, sizeof(info.reason),
+        "Hough: inlier(OLS)=%.2f < %.2f (fragmentiert)",
+        inlierRatioOls, AUTO_INLIER_RANSAC);
+
+    FitLine fl = houghLineInRoi(pts, roi, residualsOut);
+    fl.method   = FitMethod::Hough;
+    fl.autoInfo = info;
+    return fl;
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 //  Dispatch: call the right algorithm based on FitMethod
 // ──────────────────────────────────────────────────────────────────────────────
 static FitLine fitLine(const std::vector<ProfilePoint> &pts,
@@ -314,6 +427,7 @@ static FitLine fitLine(const std::vector<ProfilePoint> &pts,
     switch (method) {
         case FitMethod::RANSAC: return ransacLineInRoi(pts, roi, residualsOut);
         case FitMethod::Hough:  return houghLineInRoi (pts, roi, residualsOut);
+        case FitMethod::Auto:   return autoFitLine    (pts, roi, residualsOut);
         default:                return fitLineInRoi   (pts, roi, residualsOut);
     }
 }
@@ -497,8 +611,14 @@ void MainWindow::buildRoiGroup(QWidget * /*parent*/, QVBoxLayout *layout)
     m_roi1Method->addItem("OLS");
     m_roi1Method->addItem("RANSAC");
     m_roi1Method->addItem("Hough");
-    m_roi1Method->setToolTip("Linienfinder für ROI 1:\nOLS – Kleinste Quadrate (schnell)\nRANSAC – Ausreißer-robust\nHough – Lücken/Artefakt-robust");
+    m_roi1Method->addItem("Auto");
+    m_roi1Method->setToolTip("Linienfinder für ROI 1:\nOLS – Kleinste Quadrate (schnell)\nRANSAC – Ausreißer-robust\nHough – Lücken/Artefakt-robust\nAuto – Automatische Wahl je nach Inlier-Ratio+RMS");
     form->addRow("Methode:", m_roi1Method);
+
+    m_lblMethod1 = new QLabel("");
+    m_lblMethod1->setStyleSheet("color:#aaa; font-size:10px; font-style:italic;");
+    m_lblMethod1->setAlignment(Qt::AlignRight);
+    form->addRow(m_lblMethod1);
 
     // Separator
     QFrame *sep = new QFrame;
@@ -528,8 +648,14 @@ void MainWindow::buildRoiGroup(QWidget * /*parent*/, QVBoxLayout *layout)
     m_roi2Method->addItem("OLS");
     m_roi2Method->addItem("RANSAC");
     m_roi2Method->addItem("Hough");
-    m_roi2Method->setToolTip("Linienfinder für ROI 2:\nOLS – Kleinste Quadrate (schnell)\nRANSAC – Ausreißer-robust\nHough – Lücken/Artefakt-robust");
+    m_roi2Method->addItem("Auto");
+    m_roi2Method->setToolTip("Linienfinder für ROI 2:\nOLS – Kleinste Quadrate (schnell)\nRANSAC – Ausreißer-robust\nHough – Lücken/Artefakt-robust\nAuto – Automatische Wahl je nach Inlier-Ratio+RMS");
     form->addRow("Methode:", m_roi2Method);
+
+    m_lblMethod2 = new QLabel("");
+    m_lblMethod2->setStyleSheet("color:#aaa; font-size:10px; font-style:italic;");
+    m_lblMethod2->setAlignment(Qt::AlignRight);
+    form->addRow(m_lblMethod2);
 
     QLabel *lblHint = new QLabel("Tipp: ROI auch per Maus-Drag im Profil ziehen");
     lblHint->setStyleSheet("color:#666; font-size:10px;");
@@ -893,11 +1019,38 @@ void MainWindow::computeAndDisplayFitLines(const std::vector<ProfilePoint> &pts)
     m_profileWidget->updateFitLines(fl1, fl2, res1, res2);
     updateAngleDisplay(fl1, fl2);
 
-    // Method name helper
-    auto methodName = [](FitMethod m) -> QString {
-        switch (m) {
+    // Update Auto-mode labels (show which method was actually chosen)
+    auto updateMethodLabel = [](QLabel *lbl, FitMethod requested, const FitLine &fl) {
+        if (requested == FitMethod::Auto && fl.valid) {
+            const char *chosen = "OLS";
+            if      (fl.method == FitMethod::RANSAC) chosen = "RANSAC";
+            else if (fl.method == FitMethod::Hough)  chosen = "Hough";
+            lbl->setText(QString("→ %1  |  inlier=%2")
+                             .arg(chosen)
+                             .arg(fl.autoInfo.inlierRatioRansac, 0, 'f', 2));
+            lbl->setToolTip(QString::fromUtf8(fl.autoInfo.reason));
+            lbl->setVisible(true);
+        } else {
+            lbl->clear();
+            lbl->setVisible(false);
+        }
+    };
+    updateMethodLabel(m_lblMethod1, m1, fl1);
+    updateMethodLabel(m_lblMethod2, m2, fl2);
+
+    // Method name helper (for Auto mode shows "Auto→Hough" etc.)
+    auto methodName = [](FitMethod requested, const FitLine &fl) -> QString {
+        if (requested == FitMethod::Auto && fl.valid) {
+            QString chosen;
+            if      (fl.method == FitMethod::RANSAC) chosen = "RANSAC";
+            else if (fl.method == FitMethod::Hough)  chosen = "Hough";
+            else                                      chosen = "OLS";
+            return QStringLiteral("Auto→") + chosen;
+        }
+        switch (requested) {
             case FitMethod::RANSAC: return QStringLiteral("RANSAC");
             case FitMethod::Hough:  return QStringLiteral("Hough");
+            case FitMethod::Auto:   return QStringLiteral("Auto");
             default:                return QStringLiteral("OLS");
         }
     };
@@ -907,12 +1060,12 @@ void MainWindow::computeAndDisplayFitLines(const std::vector<ProfilePoint> &pts)
         QString msg;
         if (fl1.valid)
             msg += QString("ROI1[%1]: φ=%2°  RMS=%3μm")
-                   .arg(methodName(m1))
+                   .arg(methodName(m1, fl1))
                    .arg(fl1.phi, 0,'f',2)
                    .arg(fl1.rmsResidual * 1000.0, 0,'f',1);
         if (fl2.valid)
             msg += QString("   ROI2[%1]: φ=%2°  RMS=%3μm")
-                   .arg(methodName(m2))
+                   .arg(methodName(m2, fl2))
                    .arg(fl2.phi, 0,'f',2)
                    .arg(fl2.rmsResidual * 1000.0, 0,'f',1);
         statusBar()->showMessage(msg);

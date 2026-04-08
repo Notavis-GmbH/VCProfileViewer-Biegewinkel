@@ -57,11 +57,17 @@ set_target_properties(VC3DProfileViewer PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY         "${CMAKE_BINARY_DIR}/bin"
 )
 
-# ── Post-build: create Data and Devices folders next to EXE ──────────────────
+# ── Post-build: create Data, Devices and TestData folders next to EXE ────────
 add_custom_command(TARGET VC3DProfileViewer POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory
         "$<TARGET_FILE_DIR:VC3DProfileViewer>/Data"
     COMMAND ${CMAKE_COMMAND} -E make_directory
         "$<TARGET_FILE_DIR:VC3DProfileViewer>/Devices"
-    COMMENT "Creating portable folder structure (Data, Devices)"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        "$<TARGET_FILE_DIR:VC3DProfileViewer>/TestData"
+    # Copy the 20 bundled test profiles next to the EXE
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_SOURCE_DIR}/tests/data"
+        "$<TARGET_FILE_DIR:VC3DProfileViewer>/TestData"
+    COMMENT "Creating portable folder structure + copying TestData profiles"
 )

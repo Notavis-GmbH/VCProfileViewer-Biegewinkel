@@ -86,10 +86,19 @@ jobs:
       shell: pwsh
       run: |
         $pkg = "VC3DProfileViewer_portable"
-        New-Item -ItemType Directory "$pkg"         -Force | Out-Null
-        New-Item -ItemType Directory "$pkg\Data"    -Force | Out-Null
-        New-Item -ItemType Directory "$pkg\Devices" -Force | Out-Null
+        New-Item -ItemType Directory "$pkg"           -Force | Out-Null
+        New-Item -ItemType Directory "$pkg\Data"      -Force | Out-Null
+        New-Item -ItemType Directory "$pkg\Devices"   -Force | Out-Null
+        New-Item -ItemType Directory "$pkg\TestData"  -Force | Out-Null
         Copy-Item -Path "${{ env.EXE_DIR }}\*" -Destination $pkg -Recurse -Force
+        # Bundle the 20 test profiles (already copied by CMake POST_BUILD into EXE_DIR/TestData)
+        # Copy them again here in case they ended up inside EXE_DIR subtree
+        if (Test-Path "${{ env.EXE_DIR }}\TestData") {
+            Copy-Item -Path "${{ env.EXE_DIR }}\TestData\*" `
+              -Destination "$pkg\TestData" -Recurse -Force
+        } else {
+            Copy-Item -Path "tests\data\*" -Destination "$pkg\TestData" -Force
+        }
         Copy-Item README.txt $pkg -Force
         $sha = "${{ github.sha }}".Substring(0,7)
         $ts  = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd HH:mm UTC")
@@ -132,6 +141,7 @@ jobs:
           - `VC3DProfileViewer.exe` + Qt 6.8.1 DLLs (windeployqt)
           - `Data/` – JSON-Aufzeichnungen hier ablegen
           - `Devices/` – Einstellungen (wird beim ersten Start erzeugt)
+          - `TestData/` – 20 Beispielprofile zum direkten Testen (JSON Wiedergabe)
 
           ### Änderungen
           Siehe [Commit-History](https://github.com/${{ github.repository }}/commits/main)

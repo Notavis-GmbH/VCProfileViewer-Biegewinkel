@@ -27,7 +27,8 @@ jobs:
         host:         'windows'
         target:       'desktop'
         arch:         'win64_msvc2022_64'
-        modules:      'qtcharts'        # Qt Charts ist separates Modul in Qt6
+        # qt charts ist in Qt 6.7 bereits im Basis-Installer enthalten –
+        # kein separates Modul nötig (modules: leer lassen)
         cache:        true              # Qt-Download cachen → schnellere Folge-Builds
         cache-key-prefix: qt6-msvc2022
 

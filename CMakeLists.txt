@@ -31,11 +31,12 @@ set(SOURCES
 )
 
 set(HEADERS
+    include/types.h           # Shared types (ProfilePoint, RoiRect) – no Win headers
     include/mainwindow.h
     include/profilewidget.h
     include/sensorworker.h
     include/vcprotocol.h
-    include/jsonplayer.h      # NEW: JSON playback
+    include/jsonplayer.h
 )
 
 # ── Executable ────────────────────────────────────────────────────────────────

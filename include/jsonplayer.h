@@ -4,7 +4,7 @@
 #include <QTimer>
 #include <QStringList>
 #include <vector>
-#include "profilewidget.h"  // for ProfilePoint
+#include "types.h"  // ProfilePoint (no Windows headers)
 
 class JsonPlayer : public QObject
 {

@@ -14,13 +14,9 @@
 #include <QMouseEvent>
 #include <QRectF>
 #include <vector>
-#include "vcprotocol.h"  // ProfilePoint defined there
+#include "types.h"  // ProfilePoint (no Windows headers)
 
-// Region of interest (in sensor world coordinates mm)
-struct RoiRect {
-    double xMin, xMax, zMin, zMax;
-    bool valid = false;
-};
+// RoiRect is defined in types.h
 
 class ProfileChartView : public QChartView
 {

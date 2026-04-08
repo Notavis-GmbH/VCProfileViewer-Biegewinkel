@@ -9,8 +9,8 @@
 #include <QAtomicInt>
 #include <QString>
 #include <vector>
-#include "vcprotocol.h"
-#include "profilewidget.h"
+#include "types.h"     // ProfilePoint, RoiRect (no Windows headers)
+#include "vcprotocol.h" // VcProtocol (includes winsock2 on Windows)
 
 struct AngleResult {
     bool    valid = false;

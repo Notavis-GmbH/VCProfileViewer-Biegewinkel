@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <string>
+#include "types.h"  // ProfilePoint
 
 #ifdef _WIN32
 #  include <winsock2.h>
@@ -72,13 +73,7 @@ struct VcMetaHeader {
 };
 #pragma pack(pop)
 
-// -----------------------------------------------------------------------
-// Profile point
-// -----------------------------------------------------------------------
-struct ProfilePoint {
-    float x_mm;
-    float z_mm;
-};
+// ProfilePoint is defined in types.h (included above)
 
 // -----------------------------------------------------------------------
 // VcProtocol – thin wrapper around a blocking TCP socket

@@ -13,7 +13,7 @@
 #include <QSettings>
 #include <memory>
 
-#include "vcprotocol.h"
+#include "types.h"      // ProfilePoint, RoiRect
 #include "sensorworker.h"
 #include "profilewidget.h"
 #include "jsonplayer.h"

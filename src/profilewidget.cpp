@@ -22,6 +22,8 @@ ProfileChartView::ProfileChartView(QChart *chart, QWidget *parent)
 {
     setRenderHint(QPainter::Antialiasing);
     setMouseTracking(true);
+    // Disable Qt Charts built-in rubber-band zoom – we handle wheel ourselves
+    setRubberBand(QChartView::NoRubberBand);
     m_rois[0] = m_rois[1] = RoiRect{};
 }
 
@@ -104,6 +106,8 @@ void ProfileChartView::mouseMoveEvent(QMouseEvent *e)
             double dz =  dzPx / plotArea.height() * zRange;
             axX->setRange(m_panX0min + dx, m_panX0max + dx);
             axZ->setRange(m_panZ0min + dz, m_panZ0max + dz);
+            chart()->update();
+            scene()->update();
         }
         e->accept();
         return;
@@ -152,6 +156,16 @@ void ProfileChartView::mouseReleaseEvent(QMouseEvent *e)
     QChartView::mouseReleaseEvent(e);
 }
 
+void ProfileChartView::setHeatmapData(
+        const std::vector<std::pair<double,double>> &res1,
+        const std::vector<std::pair<double,double>> &res2,
+        const FitLine &fl1, const FitLine &fl2)
+{
+    m_hmRes1 = res1;  m_hmLine1 = fl1;
+    m_hmRes2 = res2;  m_hmLine2 = fl2;
+    viewport()->update();
+}
+
 void ProfileChartView::mouseDoubleClickEvent(QMouseEvent *e)
 {
     // Double-click = emit signal so ProfileWidget can reset zoom
@@ -179,6 +193,9 @@ void ProfileChartView::wheelEvent(QWheelEvent *e)
     axX->setRange(newXMin, newXMax);
     axZ->setRange(newZMin, newZMax);
 
+    // Force immediate repaint – Qt Charts defers redraws otherwise
+    chart()->update();
+    scene()->update();
     e->accept();
 }
 
@@ -227,6 +244,34 @@ void ProfileChartView::drawRoiOverlay(QPainter &painter, RoiId id, QColor color)
     painter.drawText(tl + QPoint(4, 14), label);
 }
 
+// Helper: colour for a residual value relative to the max in this ROI
+static QColor heatColor(double residual, double maxRes)
+{
+    if (maxRes < 1e-9) return QColor::fromHsv(120, 200, 255, 210);
+    double t   = std::min(residual / maxRes, 1.0);   // 0 (good) … 1 (bad)
+    int    hue = static_cast<int>((1.0 - t) * 120.0); // green=120 → red=0
+    return QColor::fromHsv(hue, 230, 255, 210);
+}
+
+void ProfileChartView::drawHeatmap(
+        QPainter &painter,
+        const std::vector<std::pair<double,double>> &residuals,
+        const FitLine &fl)
+{
+    if (!fl.valid || residuals.empty()) return;
+
+    painter.setPen(Qt::NoPen);
+    const int hs = 4;   // half-size of each heat square in pixels
+    for (auto &r : residuals) {
+        double x   = r.first;
+        double res = r.second;
+        double z   = fl.slope * x + fl.intercept;  // z on fit line
+        QPoint px  = chartToWidget(x, z);
+        QColor col = heatColor(res, fl.maxResidual);
+        painter.fillRect(px.x() - hs, px.y() - hs, hs * 2, hs * 2, col);
+    }
+}
+
 void ProfileChartView::paintEvent(QPaintEvent *e)
 {
     QChartView::paintEvent(e);
@@ -234,11 +279,15 @@ void ProfileChartView::paintEvent(QPaintEvent *e)
     QPainter painter(viewport());
     painter.setRenderHint(QPainter::Antialiasing);
 
-    // Draw committed ROIs
-    drawRoiOverlay(painter, ROI_1, QColor(0, 180, 255));   // blue
-    drawRoiOverlay(painter, ROI_2, QColor(255, 140, 0));   // orange
+    // 1. Heatmap (drawn first, behind ROI borders and lines)
+    drawHeatmap(painter, m_hmRes1, m_hmLine1);
+    drawHeatmap(painter, m_hmRes2, m_hmLine2);
 
-    // Draw in-progress rubber-band
+    // 2. ROI overlay borders
+    drawRoiOverlay(painter, ROI_1, QColor(0, 180, 255));
+    drawRoiOverlay(painter, ROI_2, QColor(255, 140, 0));
+
+    // 3. ROI rubber-band while drawing
     if (m_dragging) {
         QRect dragRect = QRect(m_dragStart, m_dragCurrent).normalized();
         QColor col = (m_drawingRoi == ROI_1) ? QColor(0, 180, 255, 60)
@@ -369,6 +418,8 @@ void ProfileWidget::updateProfile(const std::vector<ProfilePoint> &points)
 void ProfileWidget::clearProfile()
 {
     m_profileSeries->clear();
+    m_fitSeries1->clear();
+    m_fitSeries2->clear();
     m_firstFrame = true;  // next data will re-fit axes
 }
 
@@ -414,18 +465,24 @@ void ProfileWidget::resetZoom()
     m_chartView->viewport()->update();
 }
 
-void ProfileWidget::updateFitLines(const FitLine &line1, const FitLine &line2)
+void ProfileWidget::updateFitLines(
+        const FitLine &line1, const FitLine &line2,
+        const std::vector<std::pair<double,double>> &residuals1,
+        const std::vector<std::pair<double,double>> &residuals2)
 {
-    // Helper: fill a series with 2 points spanning the ROI x-range
-    auto fillSeries = [](QLineSeries *s, const FitLine &fl) {
+    // Update fit-line Qt series (drawn by Qt Charts engine)
+    auto fillLine = [](QLineSeries *s, const FitLine &fl) {
         s->clear();
         if (!fl.valid) return;
-        double x0 = fl.xMin, x1 = fl.xMax;
-        s->append(x0, fl.slope * x0 + fl.intercept);
-        s->append(x1, fl.slope * x1 + fl.intercept);
+        s->append(fl.xMin, fl.slope * fl.xMin + fl.intercept);
+        s->append(fl.xMax, fl.slope * fl.xMax + fl.intercept);
     };
-    fillSeries(m_fitSeries1, line1);
-    fillSeries(m_fitSeries2, line2);
+    fillLine(m_fitSeries1, line1);
+    fillLine(m_fitSeries2, line2);
+
+    // Forward heatmap data to the chart view for per-point paintEvent rendering
+    m_chartView->setHeatmapData(residuals1, residuals2, line1, line2);
+
     m_chartView->viewport()->update();
 }
 

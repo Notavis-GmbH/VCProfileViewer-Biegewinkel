@@ -73,6 +73,7 @@ private:
     void applySourceMode();
     void updateConnectButtons(bool connected);
     void updatePlayButtons(bool playing);
+    void computeAndDisplayFitLines(const std::vector<ProfilePoint> &pts);
     void updateAngleDisplay(const FitLine &fl1, const FitLine &fl2);
     void saveSettings();
     void loadSettings();

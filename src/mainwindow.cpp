@@ -28,12 +28,15 @@
 #include <QSizePolicy>
 #include <cmath>
 #include <numeric>
+#include <utility>
 
 // ──────────────────────────────────────────────────────────────────────────────
 //  Local helper: least-squares line fit through profile points inside a ROI
 //  Returns FitLine with z = slope*x + intercept
 // ──────────────────────────────────────────────────────────────────────────────
-static FitLine fitLineInRoi(const std::vector<ProfilePoint> &pts, const RoiRect &roi)
+static FitLine fitLineInRoi(const std::vector<ProfilePoint> &pts,
+                             const RoiRect &roi,
+                             std::vector<std::pair<double,double>> *residualsOut = nullptr)
 {
     FitLine fl;
     if (!roi.valid) return fl;
@@ -62,9 +65,20 @@ static FitLine fitLineInRoi(const std::vector<ProfilePoint> &pts, const RoiRect 
     fl.intercept = (sumZ - fl.slope * sumX) / n;
     fl.xMin      = roi.xMin;
     fl.xMax      = roi.xMax;
-    // phi = angle of line from horizontal in degrees
     fl.phi       = std::atan(fl.slope) * 180.0 / M_PI;
-    fl.valid     = true;
+
+    // Compute residuals
+    double sumSq = 0.0;
+    if (residualsOut) residualsOut->clear();
+    for (size_t i = 0; i < xs.size(); ++i) {
+        double res = std::abs(zs[i] - (fl.slope * xs[i] + fl.intercept));
+        sumSq += res * res;
+        fl.maxResidual = std::max(fl.maxResidual, res);
+        if (residualsOut)
+            residualsOut->emplace_back(xs[i], res);
+    }
+    fl.rmsResidual = std::sqrt(sumSq / n);
+    fl.valid       = true;
     return fl;
 }
 
@@ -434,20 +448,7 @@ void MainWindow::onDisconnectClicked()
 void MainWindow::onSensorData(const std::vector<ProfilePoint> &points)
 {
     m_profileWidget->updateProfile(points);
-
-    // Compute local fit lines from the live profile data
-    RoiRect roi1, roi2;
-    roi1.xMin = m_roi1Start->value(); roi1.xMax = m_roi1End->value();
-    roi1.valid = (roi1.xMax > roi1.xMin);
-    roi2.xMin = m_roi2Start->value(); roi2.xMax = m_roi2End->value();
-    roi2.valid = (roi2.xMax > roi2.xMin);
-
-    FitLine fl1 = fitLineInRoi(points, roi1);
-    FitLine fl2 = fitLineInRoi(points, roi2);
-    m_profileWidget->updateFitLines(fl1, fl2);
-
-    // Update angle display from local fit
-    updateAngleDisplay(fl1, fl2);
+    computeAndDisplayFitLines(points);
 }
 
 void MainWindow::onAngleReady(AngleResult /*result*/)
@@ -621,18 +622,37 @@ void MainWindow::onJsonPlaybackStopped()
 void MainWindow::onJsonProfileReady(const std::vector<ProfilePoint> &points)
 {
     m_profileWidget->updateProfile(points);
+    computeAndDisplayFitLines(points);
+}
 
-    // Compute local fit lines (JSON mode has no sensor angle data)
+void MainWindow::computeAndDisplayFitLines(const std::vector<ProfilePoint> &pts)
+{
     RoiRect roi1, roi2;
     roi1.xMin = m_roi1Start->value(); roi1.xMax = m_roi1End->value();
     roi1.valid = (roi1.xMax > roi1.xMin);
     roi2.xMin = m_roi2Start->value(); roi2.xMax = m_roi2End->value();
     roi2.valid = (roi2.xMax > roi2.xMin);
 
-    FitLine fl1 = fitLineInRoi(points, roi1);
-    FitLine fl2 = fitLineInRoi(points, roi2);
-    m_profileWidget->updateFitLines(fl1, fl2);
+    std::vector<std::pair<double,double>> res1, res2;
+    FitLine fl1 = fitLineInRoi(pts, roi1, &res1);
+    FitLine fl2 = fitLineInRoi(pts, roi2, &res2);
+
+    m_profileWidget->updateFitLines(fl1, fl2, res1, res2);
     updateAngleDisplay(fl1, fl2);
+
+    // Show RMS residuals in status bar
+    if (fl1.valid || fl2.valid) {
+        QString msg;
+        if (fl1.valid)
+            msg += QString("ROI1: φ=%1°  RMS=%2μm")
+                   .arg(fl1.phi, 0,'f',2)
+                   .arg(fl1.rmsResidual * 1000.0, 0,'f',1);
+        if (fl2.valid)
+            msg += QString("   ROI2: φ=%1°  RMS=%2μm")
+                   .arg(fl2.phi, 0,'f',2)
+                   .arg(fl2.rmsResidual * 1000.0, 0,'f',1);
+        statusBar()->showMessage(msg);
+    }
 }
 
 void MainWindow::updateAngleDisplay(const FitLine &fl1, const FitLine &fl2)

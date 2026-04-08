@@ -15,7 +15,9 @@
 #include <QWheelEvent>
 #include <QRectF>
 #include <vector>
-#include "types.h"  // ProfilePoint (no Windows headers)
+#include <utility>
+#include <cmath>
+#include "types.h"  // ProfilePoint, RoiRect, FitLine (no Windows headers)
 
 // RoiRect is defined in types.h
 
@@ -33,6 +35,11 @@ public:
     void setRoi(RoiId id, const RoiRect &r);
     RoiRect roi(RoiId id) const { return m_rois[id]; }
 
+    // Heatmap: per-point (x_mm, |residual_mm|) + max residual per ROI
+    void setHeatmapData(const std::vector<std::pair<double,double>> &res1,
+                        const std::vector<std::pair<double,double>> &res2,
+                        const FitLine &fl1, const FitLine &fl2);
+
 signals:
     void roiChanged(int roiId, RoiRect r);
     void resetZoomRequested();
@@ -49,6 +56,9 @@ private:
     QPoint  chartToWidget(double x, double z) const;
     QPointF widgetToChart(const QPoint &p)    const;
     void    drawRoiOverlay(QPainter &painter, RoiId id, QColor color);
+    void    drawHeatmap(QPainter &painter,
+                        const std::vector<std::pair<double,double>> &residuals,
+                        const FitLine &fl);
 
     RoiId   m_drawingRoi = ROI_NONE;
 
@@ -61,7 +71,11 @@ private:
     // Pan state (right mouse button)
     bool    m_panning    = false;
     QPoint  m_panStart;
-    double  m_panX0min, m_panX0max, m_panZ0min, m_panZ0max;
+    double  m_panX0min = 0, m_panX0max = 0, m_panZ0min = 0, m_panZ0max = 0;
+
+    // Heatmap data (painted in paintEvent per-point)
+    std::vector<std::pair<double,double>> m_hmRes1, m_hmRes2;
+    FitLine  m_hmLine1, m_hmLine2;
 };
 
 // -----------------------------------------------------------------------
@@ -74,7 +88,10 @@ public:
 
     void updateProfile(const std::vector<ProfilePoint> &points);
     void updateProductResult(const QString &resultText);
-    void updateFitLines(const FitLine &line1, const FitLine &line2);
+    // residuals1/2: per-point (x, residual_mm) pairs for heatmap
+    void updateFitLines(const FitLine &line1, const FitLine &line2,
+                        const std::vector<std::pair<double,double>> &residuals1,
+                        const std::vector<std::pair<double,double>> &residuals2);
     void clearProfile();
 
     void setRoi(int roiId, const RoiRect &r);
@@ -92,8 +109,13 @@ private:
     ProfileChartView *m_chartView;
     QChart           *m_chart;
     QLineSeries      *m_profileSeries;
-    QLineSeries      *m_fitSeries1;   // ROI 1 fit line (blue)
-    QLineSeries      *m_fitSeries2;   // ROI 2 fit line (orange)
+    QLineSeries      *m_fitSeries1;    // ROI 1 fit line (blue)
+    QLineSeries      *m_fitSeries2;    // ROI 2 fit line (orange)
+    // Heatmap data stored for per-point painting in ProfileChartView::paintEvent
+    std::vector<std::pair<double,double>> m_residuals1;  // (x_mm, |residual|)
+    std::vector<std::pair<double,double>> m_residuals2;
+    FitLine  m_fitLine1;
+    FitLine  m_fitLine2;
     QValueAxis       *m_axisX;
     QValueAxis       *m_axisZ;
     bool              m_autoScale = true;

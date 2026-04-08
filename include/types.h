@@ -20,10 +20,12 @@ struct RoiRect {
 // Result of a linear regression fit within one ROI
 // Represents the line  z = slope * x + intercept
 struct FitLine {
-    double slope     = 0.0;
-    double intercept = 0.0;
-    double xMin      = 0.0;  // draw range (= ROI x-bounds)
-    double xMax      = 0.0;
-    double phi       = 0.0;  // angle in degrees (from sensor or computed)
-    bool   valid     = false;
+    double slope       = 0.0;
+    double intercept   = 0.0;
+    double xMin        = 0.0;   // draw range (= ROI x-bounds)
+    double xMax        = 0.0;
+    double phi         = 0.0;   // angle in degrees (atan(slope))
+    double rmsResidual = 0.0;   // root-mean-square residual [mm]
+    double maxResidual = 0.0;   // maximum absolute residual [mm]
+    bool   valid       = false;
 };

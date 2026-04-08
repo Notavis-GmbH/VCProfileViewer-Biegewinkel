@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [ main ]
 
+# Explizite Schreibrechte für das GITHUB_TOKEN (nötig für Release-Erstellung)
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Build & Package (Windows x64)

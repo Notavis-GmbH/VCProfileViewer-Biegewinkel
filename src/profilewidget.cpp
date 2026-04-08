@@ -263,11 +263,27 @@ ProfileWidget::ProfileWidget(QWidget *parent) : QWidget(parent)
     m_chart->setMargins(QMargins(0, 0, 0, 0));
     m_chart->setBackgroundBrush(QBrush(QColor(30, 30, 30)));
 
+    // Profile series (green)
     m_profileSeries = new QLineSeries();
     QPen pen(QColor(0, 200, 100));
     pen.setWidth(2);
     m_profileSeries->setPen(pen);
     m_chart->addSeries(m_profileSeries);
+
+    // Fit line series – ROI 1 (blue) and ROI 2 (orange), drawn on top
+    m_fitSeries1 = new QLineSeries();
+    QPen fitPen1(QColor(0, 180, 255));
+    fitPen1.setWidth(3);
+    fitPen1.setStyle(Qt::SolidLine);
+    m_fitSeries1->setPen(fitPen1);
+    m_chart->addSeries(m_fitSeries1);
+
+    m_fitSeries2 = new QLineSeries();
+    QPen fitPen2(QColor(255, 140, 0));
+    fitPen2.setWidth(3);
+    fitPen2.setStyle(Qt::SolidLine);
+    m_fitSeries2->setPen(fitPen2);
+    m_chart->addSeries(m_fitSeries2);
 
     m_axisX = new QValueAxis();
     m_axisX->setTitleText("X [mm]");
@@ -289,6 +305,10 @@ ProfileWidget::ProfileWidget(QWidget *parent) : QWidget(parent)
     m_chart->addAxis(m_axisZ, Qt::AlignLeft);
     m_profileSeries->attachAxis(m_axisX);
     m_profileSeries->attachAxis(m_axisZ);
+    m_fitSeries1->attachAxis(m_axisX);
+    m_fitSeries1->attachAxis(m_axisZ);
+    m_fitSeries2->attachAxis(m_axisX);
+    m_fitSeries2->attachAxis(m_axisZ);
 
     m_chartView = new ProfileChartView(m_chart, this);
     m_chartView->setMinimumHeight(400);
@@ -391,6 +411,21 @@ void ProfileWidget::resetZoom()
     double mZ = (maxZ - minZ) * 0.10 + 1.0;
     m_axisX->setRange(minX - mX, maxX + mX);
     m_axisZ->setRange(minZ - mZ, maxZ + mZ);
+    m_chartView->viewport()->update();
+}
+
+void ProfileWidget::updateFitLines(const FitLine &line1, const FitLine &line2)
+{
+    // Helper: fill a series with 2 points spanning the ROI x-range
+    auto fillSeries = [](QLineSeries *s, const FitLine &fl) {
+        s->clear();
+        if (!fl.valid) return;
+        double x0 = fl.xMin, x1 = fl.xMax;
+        s->append(x0, fl.slope * x0 + fl.intercept);
+        s->append(x1, fl.slope * x1 + fl.intercept);
+    };
+    fillSeries(m_fitSeries1, line1);
+    fillSeries(m_fitSeries2, line2);
     m_chartView->viewport()->update();
 }
 

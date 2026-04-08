@@ -61,6 +61,7 @@ private slots:
     void onJsonFolderLoaded(int frameCount);
     void onJsonPlaybackStarted();
     void onJsonPlaybackStopped();
+    void onJsonProfileReady(const std::vector<ProfilePoint> &points);
 
 private:
     void buildUi();
@@ -72,6 +73,7 @@ private:
     void applySourceMode();
     void updateConnectButtons(bool connected);
     void updatePlayButtons(bool playing);
+    void updateAngleDisplay(const FitLine &fl1, const FitLine &fl2);
     void saveSettings();
     void loadSettings();
     QString settingsPath() const;

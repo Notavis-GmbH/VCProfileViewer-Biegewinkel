@@ -16,3 +16,14 @@ struct RoiRect {
     double zMax =  9999.0;
     bool valid = false;
 };
+
+// Result of a linear regression fit within one ROI
+// Represents the line  z = slope * x + intercept
+struct FitLine {
+    double slope     = 0.0;
+    double intercept = 0.0;
+    double xMin      = 0.0;  // draw range (= ROI x-bounds)
+    double xMax      = 0.0;
+    double phi       = 0.0;  // angle in degrees (from sensor or computed)
+    bool   valid     = false;
+};

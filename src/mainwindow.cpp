@@ -26,6 +26,47 @@
 #include <QScrollArea>
 #include <QStatusBar>
 #include <QSizePolicy>
+#include <cmath>
+#include <numeric>
+
+// ──────────────────────────────────────────────────────────────────────────────
+//  Local helper: least-squares line fit through profile points inside a ROI
+//  Returns FitLine with z = slope*x + intercept
+// ──────────────────────────────────────────────────────────────────────────────
+static FitLine fitLineInRoi(const std::vector<ProfilePoint> &pts, const RoiRect &roi)
+{
+    FitLine fl;
+    if (!roi.valid) return fl;
+
+    // Collect points inside the ROI x-range
+    std::vector<double> xs, zs;
+    for (const auto &p : pts) {
+        if (p.x_mm >= roi.xMin && p.x_mm <= roi.xMax)
+        { xs.push_back(p.x_mm); zs.push_back(p.z_mm); }
+    }
+    if (xs.size() < 2) return fl;
+
+    // Ordinary least squares: z = slope*x + intercept
+    double n    = static_cast<double>(xs.size());
+    double sumX = 0, sumZ = 0, sumXX = 0, sumXZ = 0;
+    for (size_t i = 0; i < xs.size(); ++i) {
+        sumX  += xs[i];
+        sumZ  += zs[i];
+        sumXX += xs[i] * xs[i];
+        sumXZ += xs[i] * zs[i];
+    }
+    double denom = n * sumXX - sumX * sumX;
+    if (std::abs(denom) < 1e-12) return fl;  // vertical / degenerate
+
+    fl.slope     = (n * sumXZ - sumX * sumZ) / denom;
+    fl.intercept = (sumZ - fl.slope * sumX) / n;
+    fl.xMin      = roi.xMin;
+    fl.xMax      = roi.xMax;
+    // phi = angle of line from horizontal in degrees
+    fl.phi       = std::atan(fl.slope) * 180.0 / M_PI;
+    fl.valid     = true;
+    return fl;
+}
 
 // ──────────────────────────────────────────────────────────────────────────────
 //  Construction
@@ -297,8 +338,9 @@ void MainWindow::buildPlaybackGroup(QWidget * /*parent*/, QVBoxLayout *layout)
     connect(m_btnStepFwd, &QPushButton::clicked, this, &MainWindow::onStepForwardClicked);
     connect(m_speedSlider,&QSlider::valueChanged, this, &MainWindow::onSpeedSliderChanged);
 
-    // JsonPlayer signals
-    connect(m_jsonPlayer, &JsonPlayer::profileReady,    m_profileWidget, &ProfileWidget::updateProfile);
+    // JsonPlayer signals – profileReady goes through MainWindow so we can
+    // compute fit lines before forwarding to ProfileWidget
+    connect(m_jsonPlayer, &JsonPlayer::profileReady,    this, &MainWindow::onJsonProfileReady);
     connect(m_jsonPlayer, &JsonPlayer::frameChanged,    this, &MainWindow::onJsonFrameChanged);
     connect(m_jsonPlayer, &JsonPlayer::folderLoaded,    this, &MainWindow::onJsonFolderLoaded);
     connect(m_jsonPlayer, &JsonPlayer::playbackStarted, this, &MainWindow::onJsonPlaybackStarted);
@@ -392,14 +434,26 @@ void MainWindow::onDisconnectClicked()
 void MainWindow::onSensorData(const std::vector<ProfilePoint> &points)
 {
     m_profileWidget->updateProfile(points);
+
+    // Compute local fit lines from the live profile data
+    RoiRect roi1, roi2;
+    roi1.xMin = m_roi1Start->value(); roi1.xMax = m_roi1End->value();
+    roi1.valid = (roi1.xMax > roi1.xMin);
+    roi2.xMin = m_roi2Start->value(); roi2.xMax = m_roi2End->value();
+    roi2.valid = (roi2.xMax > roi2.xMin);
+
+    FitLine fl1 = fitLineInRoi(points, roi1);
+    FitLine fl2 = fitLineInRoi(points, roi2);
+    m_profileWidget->updateFitLines(fl1, fl2);
+
+    // Update angle display from local fit
+    updateAngleDisplay(fl1, fl2);
 }
 
-void MainWindow::onAngleReady(AngleResult result)
+void MainWindow::onAngleReady(AngleResult /*result*/)
 {
-    if (!result.valid) return;
-    m_lblPhi1->setText(QString("Phi 1: %1°").arg(result.phi, 0, 'f', 2));
-    m_lblPhi2->setText(QString("Phi 2: —"));  // second ROI from separate parse
-    m_lblAngle->setText(QString("%1°").arg(result.phi, 0, 'f', 2));
+    // Angle display is now handled by updateAngleDisplay() via onSensorData
+    // (local regression is used for both Live and JSON modes)
 }
 
 void MainWindow::onSensorError(const QString &msg)
@@ -562,6 +616,49 @@ void MainWindow::onJsonPlaybackStopped()
 {
     updatePlayButtons(false);
     statusBar()->showMessage("JSON Wiedergabe gestoppt");
+}
+
+void MainWindow::onJsonProfileReady(const std::vector<ProfilePoint> &points)
+{
+    m_profileWidget->updateProfile(points);
+
+    // Compute local fit lines (JSON mode has no sensor angle data)
+    RoiRect roi1, roi2;
+    roi1.xMin = m_roi1Start->value(); roi1.xMax = m_roi1End->value();
+    roi1.valid = (roi1.xMax > roi1.xMin);
+    roi2.xMin = m_roi2Start->value(); roi2.xMax = m_roi2End->value();
+    roi2.valid = (roi2.xMax > roi2.xMin);
+
+    FitLine fl1 = fitLineInRoi(points, roi1);
+    FitLine fl2 = fitLineInRoi(points, roi2);
+    m_profileWidget->updateFitLines(fl1, fl2);
+    updateAngleDisplay(fl1, fl2);
+}
+
+void MainWindow::updateAngleDisplay(const FitLine &fl1, const FitLine &fl2)
+{
+    if (fl1.valid)
+        m_lblPhi1->setText(QString("Phi 1: %1°").arg(fl1.phi, 0, 'f', 2));
+    else
+        m_lblPhi1->setText("Phi 1: —");
+
+    if (fl2.valid)
+        m_lblPhi2->setText(QString("Phi 2: %1°").arg(fl2.phi, 0, 'f', 2));
+    else
+        m_lblPhi2->setText("Phi 2: —");
+
+    if (fl1.valid && fl2.valid) {
+        // Bending angle = difference between the two line angles
+        double delta = fl2.phi - fl1.phi;
+        // Normalize to [-180, 180]
+        while (delta >  180.0) delta -= 360.0;
+        while (delta < -180.0) delta += 360.0;
+        m_lblAngle->setText(QString("%1°").arg(std::abs(delta), 0, 'f', 2));
+    } else if (fl1.valid) {
+        m_lblAngle->setText(QString("%1°").arg(fl1.phi, 0, 'f', 2));
+    } else {
+        m_lblAngle->setText("—");
+    }
 }
 
 void MainWindow::updatePlayButtons(bool playing)

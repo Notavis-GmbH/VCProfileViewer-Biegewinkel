@@ -74,6 +74,7 @@ public:
 
     void updateProfile(const std::vector<ProfilePoint> &points);
     void updateProductResult(const QString &resultText);
+    void updateFitLines(const FitLine &line1, const FitLine &line2);
     void clearProfile();
 
     void setRoi(int roiId, const RoiRect &r);
@@ -91,6 +92,8 @@ private:
     ProfileChartView *m_chartView;
     QChart           *m_chart;
     QLineSeries      *m_profileSeries;
+    QLineSeries      *m_fitSeries1;   // ROI 1 fit line (blue)
+    QLineSeries      *m_fitSeries2;   // ROI 2 fit line (orange)
     QValueAxis       *m_axisX;
     QValueAxis       *m_axisZ;
     bool              m_autoScale = true;

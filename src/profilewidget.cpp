@@ -458,55 +458,94 @@ void ProfileChartView::drawInfoPanel(QPainter &painter)
 // ─────────────────────────────────────────────────────────────────────────────
 void ProfileChartView::drawDocOverlay(QPainter &painter)
 {
-    // Semi-transparent full-chart panel
-    QRectF pa = chart()->plotArea();
-    QRect  overlay(static_cast<int>(pa.left())  + 20,
-                   static_cast<int>(pa.top())   + 20,
-                   std::min(520, static_cast<int>(pa.width())  - 40),
-                   std::min(420, static_cast<int>(pa.height()) - 40));
-
-    painter.setPen(Qt::NoPen);
-    painter.setBrush(QColor(10, 10, 20, 230));
-    painter.drawRoundedRect(overlay, 10, 10);
-    painter.setPen(QPen(QColor(100, 100, 130), 1));
-    painter.drawRoundedRect(overlay, 10, 10);
-
     QFont titleFont = painter.font();
-    titleFont.setPointSize(11);
+    titleFont.setPointSize(13);
     titleFont.setBold(true);
+    QFont sectionFont = painter.font();
+    sectionFont.setPointSize(11);
+    sectionFont.setBold(true);
     QFont bodyFont = painter.font();
-    bodyFont.setPointSize(9);
+    bodyFont.setPointSize(10);
     bodyFont.setBold(false);
 
-    int x  = overlay.x() + 16;
-    int y  = overlay.y() + 18;
-    int w  = overlay.width() - 32;
+    // ── Measure content height first so the box fits exactly ─────────────────
+    QFontMetrics fmTitle(titleFont);
+    QFontMetrics fmSection(sectionFont);
+    QFontMetrics fmBody(bodyFont);
+
+    const int titleLineH   = fmTitle.height()   + 4;
+    const int sectionLineH = fmSection.height() + 6;
+    const int bodyLineH    = fmBody.height()    + 4;
+    const int sectionGap   = 6;   // extra space before each section
+    const int closeHintH   = bodyLineH + 8;
+    const int paddingV     = 20;  // top + bottom padding
+    const int paddingH     = 20;  // left + right padding
+    const int panelW       = 580;
+    const int keyW         = 150;
+
+    // Count total height
+    int contentH = titleLineH + 6 /*divider*/;
+    // Steuerung: 1 section + 5 rows
+    contentH += sectionGap + sectionLineH + 5 * bodyLineH;
+    // Linienfinder: 1 section + 4 rows
+    contentH += sectionGap + sectionLineH + 4 * bodyLineH;
+    // Auto-Heuristik: 1 section + 5 rows
+    contentH += sectionGap + sectionLineH + 5 * bodyLineH;
+    // Visualisierung: 1 section + 4 rows
+    contentH += sectionGap + sectionLineH + 4 * bodyLineH;
+    contentH += closeHintH;
+    const int panelH = contentH + paddingV * 2;
+
+    // ── Position: top-left of plot area ──────────────────────────────────────
+    QRectF pa = chart()->plotArea();
+    int ox = static_cast<int>(pa.left()) + 20;
+    int oy = static_cast<int>(pa.top())  + 20;
+    // Clamp so it never exceeds the plot area
+    int availH = static_cast<int>(pa.height()) - 40;
+    int availW = static_cast<int>(pa.width())  - 40;
+    QRect overlay(ox, oy,
+                  std::min(panelW, availW),
+                  std::min(panelH, availH));
+
+    // ── Background ───────────────────────────────────────────────────────────
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QColor(10, 10, 20, 238));
+    painter.drawRoundedRect(overlay, 10, 10);
+    painter.setPen(QPen(QColor(100, 100, 140), 1));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawRoundedRect(overlay, 10, 10);
+
+    int x = overlay.x() + paddingH;
+    int y = overlay.y() + paddingV;
+    int w = overlay.width() - paddingH * 2;
 
     // ─── Title ───────────────────────────────────────────────────────────────
     painter.setFont(titleFont);
     painter.setPen(QColor(0, 200, 255));
-    painter.drawText(QRect(x, y, w, 22), Qt::AlignLeft, "VC 3D Profile Viewer  –  Hilfe & Dokumentation");
-    y += 26;
-
-    painter.setPen(QColor(70, 70, 90));
+    painter.drawText(QRect(x, y, w, titleLineH), Qt::AlignLeft | Qt::AlignVCenter,
+                     "VC 3D Profile Viewer  –  Hilfe & Dokumentation");
+    y += titleLineH + 4;
+    painter.setPen(QColor(70, 70, 100));
     painter.drawLine(x, y, x + w, y);
-    y += 8;
+    y += 6;
 
-    // ─── Section helper ───────────────────────────────────────────────────────
+    // ─── Section / row helpers ────────────────────────────────────────────────
     auto section = [&](const QString &title) {
-        painter.setFont(titleFont);
+        y += sectionGap;
+        painter.setFont(sectionFont);
         painter.setPen(QColor(160, 200, 255));
-        painter.drawText(QRect(x, y, w, 18), Qt::AlignLeft, title);
-        y += 20;
+        painter.drawText(QRect(x, y, w, sectionLineH), Qt::AlignLeft | Qt::AlignVCenter, title);
+        y += sectionLineH;
     };
-    auto row = [&](const QString &key, const QString &desc, QColor kc = QColor(200,200,200)) {
+    auto row = [&](const QString &key, const QString &desc, QColor kc = QColor(210, 210, 210)) {
         painter.setFont(bodyFont);
-        int kw = 130;
         painter.setPen(kc);
-        painter.drawText(QRect(x + 4, y, kw, 16), Qt::AlignLeft, key);
-        painter.setPen(QColor(180, 180, 180));
-        painter.drawText(QRect(x + 4 + kw, y, w - kw - 4, 16), Qt::AlignLeft, desc);
-        y += 17;
+        painter.drawText(QRect(x + 4, y, keyW, bodyLineH),
+                         Qt::AlignLeft | Qt::AlignVCenter, key);
+        painter.setPen(QColor(185, 185, 185));
+        painter.drawText(QRect(x + 4 + keyW, y, w - keyW - 8, bodyLineH),
+                         Qt::AlignLeft | Qt::AlignVCenter, desc);
+        y += bodyLineH;
     };
 
     // ─── Steuerung ───────────────────────────────────────────────────────────
@@ -515,42 +554,40 @@ void ProfileChartView::drawDocOverlay(QPainter &painter)
     row("Rechte Maustaste", "Pan (Bild verschieben)");
     row("Doppelklick",      "Zoom auf gesamte Messdaten (Fit)");
     row("Linkes Drag",      "ROI aufziehen (wenn ROI-Modus aktiv)");
-    row("⌫  Fit-Button",     "Zoom auf gesamte Messdaten zurücksetzen");
-    y += 4;
+    row("⌫  Fit-Button",    "Zoom auf gesamte Messdaten zurücksetzen");
 
     // ─── Linienfinder ────────────────────────────────────────────────────────
     section("▶ Linienfinder (pro ROI wählbar)");
-    row("OLS",     "Kleinste Quadrate – schnell, optimal für saubere Profile",
+    row("OLS",    "Kleinste Quadrate – schnell, optimal für saubere Profile",
         QColor(180, 220, 255));
-    row("RANSAC",  "Random Sample Consensus – robust gegen Ausreißer & Reflexionen",
+    row("RANSAC", "Random Sample Consensus – robust gegen Ausreißer & Reflexionen",
         QColor(255, 200, 100));
-    row("Hough",   "Hough-Transformation – robust bei Lücken & Artefakten",
+    row("Hough",  "Hough-Transformation – robust bei Lücken & Artefakten",
         QColor(100, 255, 180));
-    row("Auto",    "Automatisch: wählt OLS/RANSAC/Hough je nach Inlier-Ratio+RMS",
+    row("Auto",   "Automatisch: wählt OLS/RANSAC/Hough je nach Inlier-Ratio+RMS",
         QColor(200, 160, 255));
-    y += 4;
 
-    // ─── Auto-Modus Schwellwerte ─────────────────────────────────────────────
+    // ─── Auto-Modus Heuristik ────────────────────────────────────────────────
     section("▶ Auto-Modus Heuristik");
     row("≥ 90 % Inlier",  "OLS (sauberes Profil)");
     row("60–90 % Inlier", "RANSAC (Ausreißer erkannt)");
     row("< 60 % Inlier",  "Hough (fragmentiertes Profil)");
     row("Inlier-Band",    "0,5 mm Abstand vom OLS-Fit");
-    row("RMS-Fallback",   "RANSAC-RMS > 1,5 × OLS-RMS → Hough");
-    y += 4;
+    row("RMS-Fallback",   "RANSAC-RMS > 1,5 × OLS-RMS  →  Hough");
 
-    // ─── Visualisierung ─────────────────────────────────────────────────────
+    // ─── Visualisierung ──────────────────────────────────────────────────────
     section("▶ Visualisierung");
-    row("Blaue Linie",     "Erkannte Gerade ROI 1 (inkl. φ und RMS)");
-    row("Orange Linie",    "Erkannte Gerade ROI 2 (inkl. φ und RMS)");
-    row("Heatmap",         "Residuen je Messpunkt: grün=klein → rot=groß");
-    row("Info-Panel",      "Zusammenfassung oben rechts im Chart");
+    row("Blaue Linie",   "Erkannte Gerade ROI 1 (inkl. φ und RMS)");
+    row("Orange Linie",  "Erkannte Gerade ROI 2 (inkl. φ und RMS)");
+    row("Heatmap",       "Residuen je Messpunkt: grün=klein → rot=groß");
+    row("Info-Panel",    "Zusammenfassung oben rechts im Chart");
 
     // ─── Close hint ──────────────────────────────────────────────────────────
+    y += 4;
     painter.setFont(bodyFont);
-    painter.setPen(QColor(120, 120, 140));
-    painter.drawText(QRect(x, overlay.bottom() - 20, w, 16),
-                     Qt::AlignRight, "[ ? ] zum Schließen");
+    painter.setPen(QColor(120, 120, 150));
+    painter.drawText(QRect(x, y, w, bodyLineH),
+                     Qt::AlignRight | Qt::AlignVCenter, "[ ? ] zum Schließen");
 }
 
 void ProfileChartView::paintEvent(QPaintEvent *e)

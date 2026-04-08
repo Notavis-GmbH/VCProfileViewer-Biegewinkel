@@ -1264,13 +1264,53 @@ QString MainWindow::presetsPath() const
 void MainWindow::refreshPresetCombo()
 {
     QSignalBlocker blocker(m_cmbPresets);
+    const QString current = m_cmbPresets->currentIndex() > 0
+                            ? m_cmbPresets->currentText() : QString();
     m_cmbPresets->clear();
     m_cmbPresets->addItem("– Typ wählen –");
 
     QSettings ps(presetsPath(), QSettings::IniFormat);
     const QStringList groups = ps.childGroups();
-    for (const QString &g : groups)
+    for (const QString &g : groups) {
         m_cmbPresets->addItem(g);
+
+        // Build tooltip: IP + ROI-Bereiche + Methoden
+        ps.beginGroup(g);
+        const QString ip    = ps.value("Sensor/IP",   "?").toString();
+        const QString port  = ps.value("Sensor/Port", "?").toString();
+        const double r1s    = ps.value("ROI1/Start",   0.0).toDouble();
+        const double r1e    = ps.value("ROI1/End",     0.0).toDouble();
+        const double r2s    = ps.value("ROI2/Start",   0.0).toDouble();
+        const double r2e    = ps.value("ROI2/End",     0.0).toDouble();
+        const int    m1idx  = ps.value("ROI1/Method",  0).toInt();
+        const int    m2idx  = ps.value("ROI2/Method",  0).toInt();
+        const int    mode   = ps.value("Source/Mode",  0).toInt();
+        const QString folder= ps.value("Playback/Folder", "").toString();
+        ps.endGroup();
+
+        static const char* kMethods[] = {"OLS", "RANSAC", "Hough", "Auto"};
+        const QString m1str = (m1idx >= 0 && m1idx <= 3) ? kMethods[m1idx] : "?";
+        const QString m2str = (m2idx >= 0 && m2idx <= 3) ? kMethods[m2idx] : "?";
+        const QString modeStr = (mode == 1) ? "JSON Wiedergabe" : "Live Sensor";
+
+        QString tip;
+        tip += QString("Sensor:  %1 : %2\n").arg(ip, port);
+        tip += QString("ROI 1:   %1 … %2 mm  [%3]\n")
+               .arg(r1s, 0,'f',1).arg(r1e, 0,'f',1).arg(m1str);
+        tip += QString("ROI 2:   %1 … %2 mm  [%3]\n")
+               .arg(r2s, 0,'f',1).arg(r2e, 0,'f',1).arg(m2str);
+        tip += QString("Quelle:  %1").arg(modeStr);
+        if (!folder.isEmpty())
+            tip += QString("\nOrdner:  %1").arg(QDir::toNativeSeparators(folder));
+
+        m_cmbPresets->setItemData(m_cmbPresets->count() - 1, tip, Qt::ToolTipRole);
+    }
+
+    // Restore selection
+    if (!current.isEmpty()) {
+        int idx = m_cmbPresets->findText(current);
+        if (idx >= 0) m_cmbPresets->setCurrentIndex(idx);
+    }
 
     m_btnPresetRen->setEnabled(m_cmbPresets->count() > 1);
     m_btnPresetDel->setEnabled(m_cmbPresets->count() > 1);
@@ -1501,6 +1541,33 @@ void MainWindow::loadSettings()
     // Sync ROIs to chart – valid=true so they are drawn immediately
     { RoiRect r; r.xMin = m_roi1Start->value(); r.xMax = m_roi1End->value(); r.valid = (r.xMax > r.xMin); m_profileWidget->setRoi(0, r); }
     { RoiRect r; r.xMin = m_roi2Start->value(); r.xMax = m_roi2End->value(); r.valid = (r.xMax > r.xMin); m_profileWidget->setRoi(1, r); }
+
+    // Seed default "TestData-Setup" template if Presets.ini doesn't exist yet
+    if (!QFile::exists(presetsPath())) {
+        const QString testDataPath =
+            QDir(QApplication::applicationDirPath()).filePath("TestData");
+        const QString defaultLogPath =
+            QDir(QApplication::applicationDirPath()).filePath(
+                QString("Logs/MeasLog_%1.csv")
+                    .arg(QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss")));
+
+        QSettings ps(presetsPath(), QSettings::IniFormat);
+        ps.beginGroup("TestData-Setup");
+        ps.setValue("Sensor/IP",       "192.168.3.15");
+        ps.setValue("Sensor/Port",     "1096");
+        ps.setValue("ROI1/Start",      -44.0);
+        ps.setValue("ROI1/End",         -3.0);
+        ps.setValue("ROI1/Method",      3);    // Auto
+        ps.setValue("ROI2/Start",       18.0);
+        ps.setValue("ROI2/End",         55.0);
+        ps.setValue("ROI2/Method",      3);    // Auto
+        ps.setValue("Playback/Folder", testDataPath);
+        ps.setValue("Playback/Speed",  5);     // 1.0×
+        ps.setValue("Source/Mode",     1);     // JSON Wiedergabe
+        ps.setValue("Log/Path",        defaultLogPath);
+        ps.endGroup();
+        ps.sync();
+    }
 
     // Populate preset combo (Presets.ini may not exist yet – that's fine)
     refreshPresetCombo();

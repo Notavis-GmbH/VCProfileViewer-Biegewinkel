@@ -12,6 +12,7 @@
 #include <QValueAxis>
 #include <QRubberBand>
 #include <QMouseEvent>
+#include <QWheelEvent>
 #include <QRectF>
 #include <vector>
 #include "types.h"  // ProfilePoint (no Windows headers)
@@ -34,12 +35,15 @@ public:
 
 signals:
     void roiChanged(int roiId, RoiRect r);
+    void resetZoomRequested();
 
 protected:
     void mousePressEvent(QMouseEvent *e)   override;
     void mouseMoveEvent(QMouseEvent *e)    override;
     void mouseReleaseEvent(QMouseEvent *e) override;
-    void paintEvent(QPaintEvent *e)        override;
+    void wheelEvent(QWheelEvent *e)              override;
+    void mouseDoubleClickEvent(QMouseEvent *e)   override;
+    void paintEvent(QPaintEvent *e)              override;
 
 private:
     QPoint  chartToWidget(double x, double z) const;
@@ -47,10 +51,17 @@ private:
     void    drawRoiOverlay(QPainter &painter, RoiId id, QColor color);
 
     RoiId   m_drawingRoi = ROI_NONE;
+
+    // ROI rubber-band
     bool    m_dragging   = false;
     QPoint  m_dragStart;
     QPoint  m_dragCurrent;
     RoiRect m_rois[2];
+
+    // Pan state (right mouse button)
+    bool    m_panning    = false;
+    QPoint  m_panStart;
+    double  m_panX0min, m_panX0max, m_panZ0min, m_panZ0max;
 };
 
 // -----------------------------------------------------------------------
@@ -71,6 +82,7 @@ public:
 public slots:
     void onDrawRoi1();
     void onDrawRoi2();
+    void resetZoom();   // fit axes to current series data
 
 signals:
     void roiChanged(int roiId, RoiRect r);
@@ -82,4 +94,5 @@ private:
     QValueAxis       *m_axisX;
     QValueAxis       *m_axisZ;
     bool              m_autoScale = true;
+    bool              m_firstFrame = true;  // fit axes on very first data frame
 };

@@ -9,6 +9,7 @@
 #include <QPushButton>
 #include <QLabel>
 #include <QFont>
+#include <QWheelEvent>
 #include <algorithm>
 #include <limits>
 
@@ -62,6 +63,21 @@ QPointF ProfileChartView::widgetToChart(const QPoint &p) const
 
 void ProfileChartView::mousePressEvent(QMouseEvent *e)
 {
+    // Right mouse button = Pan
+    if (e->button() == Qt::RightButton) {
+        QValueAxis *axX = qobject_cast<QValueAxis*>(chart()->axes(Qt::Horizontal).first());
+        QValueAxis *axZ = qobject_cast<QValueAxis*>(chart()->axes(Qt::Vertical).first());
+        if (axX && axZ) {
+            m_panning  = true;
+            m_panStart = e->pos();
+            m_panX0min = axX->min(); m_panX0max = axX->max();
+            m_panZ0min = axZ->min(); m_panZ0max = axZ->max();
+            setCursor(Qt::ClosedHandCursor);
+            e->accept();
+            return;
+        }
+    }
+    // Left mouse button = ROI draw
     if (m_drawingRoi != ROI_NONE && e->button() == Qt::LeftButton) {
         m_dragging    = true;
         m_dragStart   = e->pos();
@@ -74,6 +90,25 @@ void ProfileChartView::mousePressEvent(QMouseEvent *e)
 
 void ProfileChartView::mouseMoveEvent(QMouseEvent *e)
 {
+    // Pan
+    if (m_panning) {
+        QValueAxis *axX = qobject_cast<QValueAxis*>(chart()->axes(Qt::Horizontal).first());
+        QValueAxis *axZ = qobject_cast<QValueAxis*>(chart()->axes(Qt::Vertical).first());
+        if (axX && axZ) {
+            QRectF plotArea = chart()->plotArea();
+            double dxPx = e->pos().x() - m_panStart.x();
+            double dzPx = e->pos().y() - m_panStart.y();
+            double xRange = m_panX0max - m_panX0min;
+            double zRange = m_panZ0max - m_panZ0min;
+            double dx = -dxPx / plotArea.width()  * xRange;
+            double dz =  dzPx / plotArea.height() * zRange;
+            axX->setRange(m_panX0min + dx, m_panX0max + dx);
+            axZ->setRange(m_panZ0min + dz, m_panZ0max + dz);
+        }
+        e->accept();
+        return;
+    }
+    // ROI rubber-band
     if (m_dragging) {
         m_dragCurrent = e->pos();
         viewport()->update();
@@ -85,6 +120,14 @@ void ProfileChartView::mouseMoveEvent(QMouseEvent *e)
 
 void ProfileChartView::mouseReleaseEvent(QMouseEvent *e)
 {
+    // End pan
+    if (m_panning && e->button() == Qt::RightButton) {
+        m_panning = false;
+        setCursor(m_drawingRoi != ROI_NONE ? Qt::CrossCursor : Qt::ArrowCursor);
+        e->accept();
+        return;
+    }
+    // End ROI draw
     if (m_dragging && e->button() == Qt::LeftButton) {
         m_dragging = false;
         QPointF p0 = widgetToChart(m_dragStart);
@@ -107,6 +150,36 @@ void ProfileChartView::mouseReleaseEvent(QMouseEvent *e)
         return;
     }
     QChartView::mouseReleaseEvent(e);
+}
+
+void ProfileChartView::mouseDoubleClickEvent(QMouseEvent *e)
+{
+    // Double-click = emit signal so ProfileWidget can reset zoom
+    emit resetZoomRequested();
+    QChartView::mouseDoubleClickEvent(e);
+}
+
+void ProfileChartView::wheelEvent(QWheelEvent *e)
+{
+    QValueAxis *axX = qobject_cast<QValueAxis*>(chart()->axes(Qt::Horizontal).first());
+    QValueAxis *axZ = qobject_cast<QValueAxis*>(chart()->axes(Qt::Vertical).first());
+    if (!axX || !axZ) { QChartView::wheelEvent(e); return; }
+
+    // Zoom factor: scroll up = zoom in, scroll down = zoom out
+    double factor = (e->angleDelta().y() > 0) ? 0.85 : 1.0 / 0.85;
+
+    // Zoom around the mouse cursor position in chart coordinates
+    QPointF pivot = widgetToChart(e->position().toPoint());
+
+    double newXMin = pivot.x() + (axX->min() - pivot.x()) * factor;
+    double newXMax = pivot.x() + (axX->max() - pivot.x()) * factor;
+    double newZMin = pivot.y() + (axZ->min() - pivot.y()) * factor;
+    double newZMax = pivot.y() + (axZ->max() - pivot.y()) * factor;
+
+    axX->setRange(newXMin, newXMax);
+    axZ->setRange(newZMin, newZMax);
+
+    e->accept();
 }
 
 // Chart-pixel coordinates of a world point
@@ -222,6 +295,8 @@ ProfileWidget::ProfileWidget(QWidget *parent) : QWidget(parent)
 
     connect(m_chartView, &ProfileChartView::roiChanged,
             this,        &ProfileWidget::roiChanged);
+    connect(m_chartView, &ProfileChartView::resetZoomRequested,
+            this,        &ProfileWidget::resetZoom);
 
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
@@ -233,14 +308,14 @@ void ProfileWidget::updateProfile(const std::vector<ProfilePoint> &points)
 {
     if (points.empty()) { clearProfile(); return; }
 
-    QList<QPointF> pts;
-    pts.reserve(static_cast<int>(points.size()));
-
+    // Compute data bounds
     float minX =  std::numeric_limits<float>::max();
     float maxX = -std::numeric_limits<float>::max();
     float minZ =  std::numeric_limits<float>::max();
     float maxZ = -std::numeric_limits<float>::max();
 
+    QList<QPointF> pts;
+    pts.reserve(static_cast<int>(points.size()));
     for (auto &p : points) {
         pts.append(QPointF(p.x_mm, p.z_mm));
         minX = std::min(minX, p.x_mm);
@@ -249,17 +324,24 @@ void ProfileWidget::updateProfile(const std::vector<ProfilePoint> &points)
         maxZ = std::max(maxZ, p.z_mm);
     }
 
+    // Use replace() – but guard against Qt Charts not painting:
+    // always call setRange afterwards so the chart marks itself dirty.
     m_profileSeries->replace(pts);
 
-    // Always update axis range – this triggers Qt Charts to repaint.
     float marginX = (maxX - minX) * 0.05f + 1.0f;
     float marginZ = (maxZ - minZ) * 0.10f + 1.0f;
-    if (m_autoScale) {
+
+    if (m_autoScale || m_firstFrame) {
+        // Fit axes to actual data – fixes invisible profile when
+        // data range (e.g. Z: 108..251 mm) differs from initial defaults.
         m_axisX->setRange(minX - marginX, maxX + marginX);
         m_axisZ->setRange(minZ - marginZ, maxZ + marginZ);
+        m_firstFrame = false;
     } else {
-        // Force a range re-set so Qt Charts notices the series changed
-        m_axisX->setRange(m_axisX->min(), m_axisX->max());
+        // Force Qt Charts to repaint even though axes did not change
+        double xMin = m_axisX->min(), xMax = m_axisX->max();
+        m_axisX->setRange(xMin, xMax + 1e-9);  // tiny nudge
+        m_axisX->setRange(xMin, xMax);
     }
     m_chartView->viewport()->update();
 }
@@ -267,6 +349,7 @@ void ProfileWidget::updateProfile(const std::vector<ProfilePoint> &points)
 void ProfileWidget::clearProfile()
 {
     m_profileSeries->clear();
+    m_firstFrame = true;  // next data will re-fit axes
 }
 
 void ProfileWidget::setRoi(int roiId, const RoiRect &r)
@@ -290,6 +373,25 @@ void ProfileWidget::onDrawRoi1()
 void ProfileWidget::onDrawRoi2()
 {
     m_chartView->setDrawingRoi(ProfileChartView::ROI_2);
+}
+
+void ProfileWidget::resetZoom()
+{
+    // Re-fit axes to the current series data
+    const auto &pts = m_profileSeries->points();
+    if (pts.isEmpty()) return;
+
+    double minX = pts[0].x(), maxX = pts[0].x();
+    double minZ = pts[0].y(), maxZ = pts[0].y();
+    for (const auto &p : pts) {
+        minX = std::min(minX, p.x()); maxX = std::max(maxX, p.x());
+        minZ = std::min(minZ, p.y()); maxZ = std::max(maxZ, p.y());
+    }
+    double mX = (maxX - minX) * 0.05 + 1.0;
+    double mZ = (maxZ - minZ) * 0.10 + 1.0;
+    m_axisX->setRange(minX - mX, maxX + mX);
+    m_axisZ->setRange(minZ - mZ, maxZ + mZ);
+    m_chartView->viewport()->update();
 }
 
 void ProfileWidget::updateProductResult(const QString &/*resultText*/)

@@ -307,6 +307,17 @@ void MainWindow::buildPlaybackGroup(QWidget * /*parent*/, QVBoxLayout *layout)
 
 void MainWindow::buildStatusBar()
 {
+    // "Fit" and zoom-hint button in the status bar area
+    QPushButton *btnFit = new QPushButton("⊡  Fit");
+    btnFit->setToolTip("Ansicht an Profildaten anpassen (Doppelklick im Plot hat den gleichen Effekt)");
+    btnFit->setStyleSheet("padding: 2px 10px; font-size: 11px;");
+    connect(btnFit, &QPushButton::clicked, m_profileWidget, &ProfileWidget::resetZoom);
+    statusBar()->addPermanentWidget(btnFit);
+
+    QLabel *lblHint = new QLabel("  Mausrad: Zoom  |  Rechte Maustaste: Pan  |  Linkes Drag im Plot: ROI");
+    lblHint->setStyleSheet("color:#888; font-size:10px;");
+    statusBar()->addPermanentWidget(lblHint);
+
     statusBar()->showMessage("Bereit – Quelle wählen und verbinden");
 }
 

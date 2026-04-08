@@ -1019,6 +1019,36 @@ void MainWindow::computeAndDisplayFitLines(const std::vector<ProfilePoint> &pts)
     m_profileWidget->updateFitLines(fl1, fl2, res1, res2);
     updateAngleDisplay(fl1, fl2);
 
+    // Compute bending angle for overlay
+    double bendingAngle = 0.0;
+    if (fl1.valid && fl2.valid) {
+        bendingAngle = fl2.phi - fl1.phi;
+        while (bendingAngle >  180.0) bendingAngle -= 360.0;
+        while (bendingAngle < -180.0) bendingAngle += 360.0;
+    }
+
+    // Forward method labels + bending angle to the chart overlay
+    // (must call AFTER methodName lambda is defined below – so we forward-compute here)
+    // We pass "" if a fit line is not valid so the overlay stays clean.
+    // Note: methodName is defined after this block, so we inline the logic:
+    auto inlineMethodName = [](FitMethod requested, const FitLine &fl) -> QString {
+        if (requested == FitMethod::Auto && fl.valid) {
+            if      (fl.method == FitMethod::RANSAC) return QStringLiteral("Auto\u2192RANSAC");
+            else if (fl.method == FitMethod::Hough)  return QStringLiteral("Auto\u2192Hough");
+            else                                      return QStringLiteral("Auto\u2192OLS");
+        }
+        switch (requested) {
+            case FitMethod::RANSAC: return QStringLiteral("RANSAC");
+            case FitMethod::Hough:  return QStringLiteral("Hough");
+            case FitMethod::Auto:   return QStringLiteral("Auto");
+            default:                return QStringLiteral("OLS");
+        }
+    };
+    m_profileWidget->setFitLabels(
+        fl1.valid ? inlineMethodName(m1, fl1) : QString(),
+        fl2.valid ? inlineMethodName(m2, fl2) : QString(),
+        bendingAngle);
+
     // Update Auto-mode labels (show which method was actually chosen)
     auto updateMethodLabel = [](QLabel *lbl, FitMethod requested, const FitLine &fl) {
         if (requested == FitMethod::Auto && fl.valid) {

@@ -14,6 +14,7 @@
 #include <QMouseEvent>
 #include <QWheelEvent>
 #include <QRectF>
+#include <QString>
 #include <vector>
 #include <utility>
 #include <cmath>
@@ -40,6 +41,14 @@ public:
                         const std::vector<std::pair<double,double>> &res2,
                         const FitLine &fl1, const FitLine &fl2);
 
+    // Overlay text labels shown on the fit lines and in the info panel
+    // methodLabel: "OLS" / "RANSAC" / "Hough" / "Auto→Hough" etc.
+    void setFitLabels(const QString &m1Label, const QString &m2Label,
+                      double bendingAngleDeg);
+
+    // Toggle documentation overlay on/off
+    void setDocOverlayVisible(bool v);
+
 signals:
     void roiChanged(int roiId, RoiRect r);
     void resetZoomRequested();
@@ -59,6 +68,9 @@ private:
     void    drawHeatmap(QPainter &painter,
                         const std::vector<std::pair<double,double>> &residuals,
                         const FitLine &fl);
+    void    drawFitLineLabels(QPainter &painter);
+    void    drawInfoPanel(QPainter &painter);
+    void    drawDocOverlay(QPainter &painter);
 
     RoiId   m_drawingRoi = ROI_NONE;
 
@@ -76,6 +88,14 @@ private:
     // Heatmap data (painted in paintEvent per-point)
     std::vector<std::pair<double,double>> m_hmRes1, m_hmRes2;
     FitLine  m_hmLine1, m_hmLine2;
+
+    // Fit-line overlay labels
+    QString  m_methodLabel1, m_methodLabel2;
+    double   m_bendingAngle = 0.0;
+    bool     m_hasBendingAngle = false;
+
+    // Documentation overlay
+    bool     m_docOverlayVisible = false;
 };
 
 // -----------------------------------------------------------------------
@@ -92,6 +112,9 @@ public:
     void updateFitLines(const FitLine &line1, const FitLine &line2,
                         const std::vector<std::pair<double,double>> &residuals1,
                         const std::vector<std::pair<double,double>> &residuals2);
+    // Pass method labels + bending angle for overlay display
+    void setFitLabels(const QString &m1Label, const QString &m2Label,
+                      double bendingAngleDeg);
     void clearProfile();
 
     void setRoi(int roiId, const RoiRect &r);
@@ -101,6 +124,7 @@ public slots:
     void onDrawRoi1();
     void onDrawRoi2();
     void resetZoom();   // fit axes to current series data
+    void onToggleDocOverlay();
 
 signals:
     void roiChanged(int roiId, RoiRect r);

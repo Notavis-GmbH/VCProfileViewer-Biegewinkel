@@ -16,18 +16,44 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    # ── 2. Qt 6 mit offiziellem Installer ────────────────────────────────────
-    #   use-official: true nutzt qt.io direkt (kein aqt-Mirror-Problem)
-    - name: Install Qt 6
-      uses: jurplel/install-qt-action@v4
-      with:
-        version:      '6.7.2'
-        host:         'windows'
-        target:       'desktop'
-        arch:         'win64_msvc2022_64'
-        use-official: true               # Qt Online Installer statt aqt
-        cache:        true
-        cache-key-prefix: qt672-official-msvc2022
+    # ── 2. Qt 6.8 via aqt mit explizitem Mirror ───────────────────────────────
+    #   Der Standard-Mirror (download.qt.io) ist derzeit für 6.7.x nicht
+    #   zuverlässig erreichbar. Wir geben einen alternativen Mirror vor und
+    #   nutzen Qt 6.8.1 (neueste stabile LTS).
+    - name: Install Qt 6 via aqt (mirror fallback)
+      shell: pwsh
+      run: |
+        pip install "aqtinstall==3.3.*"
+
+        # Primär: offizieller Qt-Mirror
+        $mirrors = @(
+          "https://download.qt.io/online/qtsdkrepository/",
+          "https://mirrors.dotsrc.org/qtproject/online/qtsdkrepository/",
+          "https://ftp.fau.de/qtproject/online/qtsdkrepository/"
+        )
+
+        $success = $false
+        foreach ($mirror in $mirrors) {
+          Write-Host "Versuche Mirror: $mirror"
+          python -m aqt install-qt windows desktop 6.8.1 win64_msvc2022_64 `
+            --outputdir "${{ github.workspace }}\Qt" `
+            --base "$mirror" 2>&1
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "Erfolg mit Mirror: $mirror"
+            $success = $true
+            break
+          }
+          Write-Host "Mirror fehlgeschlagen, versuche naechsten..."
+        }
+        if (-not $success) { exit 1 }
+
+    - name: Set Qt environment variables
+      shell: pwsh
+      run: |
+        $qtDir = "${{ github.workspace }}\Qt\6.8.1\msvc2022_64"
+        echo "Qt6_DIR=$qtDir\lib\cmake\Qt6" >> $env:GITHUB_ENV
+        echo "CMAKE_PREFIX_PATH=$qtDir" >> $env:GITHUB_ENV
+        echo "$qtDir\bin" >> $env:GITHUB_PATH
 
     # ── 3. MSVC2022 x64 aktivieren ────────────────────────────────────────────
     - name: Set up MSVC developer environment
@@ -37,11 +63,12 @@ jobs:
 
     # ── 4. CMake konfigurieren ────────────────────────────────────────────────
     - name: Configure CMake
+      shell: pwsh
       run: |
         cmake -B build `
           -G "NMake Makefiles" `
           -DCMAKE_BUILD_TYPE=Release `
-          -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}"
+          -DCMAKE_PREFIX_PATH="${{ env.CMAKE_PREFIX_PATH }}"
 
     # ── 5. Bauen ──────────────────────────────────────────────────────────────
     - name: Build

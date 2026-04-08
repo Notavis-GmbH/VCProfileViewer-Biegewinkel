@@ -47,10 +47,9 @@ MainWindow::MainWindow(QWidget *parent)
 
 MainWindow::~MainWindow()
 {
-    if (m_sensorThread && m_sensorThread->isRunning()) {
-        m_sensorWorker->requestStop();
-        m_sensorThread->quit();
-        m_sensorThread->wait(3000);
+    if (m_sensorWorker && m_sensorWorker->isRunning()) {
+        m_sensorWorker->stopCapture();
+        m_sensorWorker->wait(3000);
     }
 }
 
@@ -323,8 +322,9 @@ void MainWindow::applySourceMode()
 
     if (!isLive) {
         // Stop live sensor if running
-        if (m_sensorWorker) {
-            m_sensorWorker->requestStop();
+        if (m_sensorWorker && m_sensorWorker->isRunning()) {
+            m_sensorWorker->stopCapture();
+            m_sensorWorker->wait(3000);
             updateConnectButtons(false);
         }
         statusBar()->showMessage("JSON Wiedergabe – Ordner laden und Play drücken");
@@ -346,45 +346,34 @@ void MainWindow::onSourceModeChanged()
 // ──────────────────────────────────────────────────────────────────────────────
 void MainWindow::onConnectClicked()
 {
-    if (m_sensorThread && m_sensorThread->isRunning()) return;
+    if (m_sensorWorker && m_sensorWorker->isRunning()) return;
 
     QString ip   = m_editIp->text().trimmed();
     int     port = m_editPort->text().trimmed().toInt();
 
-    RoiConfig roi1, roi2;
-    roi1.xStart = static_cast<float>(m_roi1Start->value());
-    roi1.xEnd   = static_cast<float>(m_roi1End->value());
-    roi2.xStart = static_cast<float>(m_roi2Start->value());
-    roi2.xEnd   = static_cast<float>(m_roi2End->value());
+    RoiRect roi1, roi2;
+    roi1.xMin = m_roi1Start->value(); roi1.xMax = m_roi1End->value();
+    roi2.xMin = m_roi2Start->value(); roi2.xMax = m_roi2End->value();
 
-    m_sensorWorker = new SensorWorker(ip, port, roi1, roi2);
-    m_sensorThread = new QThread(this);
-    m_sensorWorker->moveToThread(m_sensorThread);
-
-    connect(m_sensorThread, &QThread::started,       m_sensorWorker, &SensorWorker::run);
-    connect(m_sensorWorker, &SensorWorker::profileData,     this, &MainWindow::onSensorData);
-    connect(m_sensorWorker, &SensorWorker::productResult,   this, &MainWindow::onProductResult);
+    m_sensorWorker = new SensorWorker(this);
+    connect(m_sensorWorker, &SensorWorker::profileReady,    this, &MainWindow::onSensorData);
+    connect(m_sensorWorker, &SensorWorker::angleReady,      this, &MainWindow::onAngleReady);
     connect(m_sensorWorker, &SensorWorker::errorOccurred,   this, &MainWindow::onSensorError);
     connect(m_sensorWorker, &SensorWorker::connected,       this, &MainWindow::onSensorConnected);
     connect(m_sensorWorker, &SensorWorker::disconnected,    this, &MainWindow::onSensorDisconnected);
 
-    connect(m_sensorThread, &QThread::finished, m_sensorWorker, &QObject::deleteLater);
-    connect(m_sensorThread, &QThread::finished, m_sensorThread, &QObject::deleteLater);
+    connect(m_sensorWorker, &QThread::finished, m_sensorWorker, &QObject::deleteLater);
 
-    m_sensorThread->start();
+    m_sensorWorker->startCapture(ip, m_editPort->text().toUShort(), roi1, roi2);
     statusBar()->showMessage("Verbinde mit " + ip + ":" + QString::number(port) + " …");
 }
 
 void MainWindow::onDisconnectClicked()
 {
     if (!m_sensorWorker) return;
-    m_sensorWorker->requestStop();
-    if (m_sensorThread) {
-        m_sensorThread->quit();
-        m_sensorThread->wait(3000);
-    }
+    m_sensorWorker->stopCapture();
+    m_sensorWorker->wait(3000);
     m_sensorWorker = nullptr;
-    m_sensorThread = nullptr;
     updateConnectButtons(false);
     statusBar()->showMessage("Verbindung getrennt");
 }
@@ -394,11 +383,12 @@ void MainWindow::onSensorData(const std::vector<ProfilePoint> &points)
     m_profileWidget->updateProfile(points);
 }
 
-void MainWindow::onProductResult(float phi1, float phi2, float angle)
+void MainWindow::onAngleReady(AngleResult result)
 {
-    m_lblPhi1->setText(QString("Phi 1: %1°").arg(phi1, 0, 'f', 2));
-    m_lblPhi2->setText(QString("Phi 2: %1°").arg(phi2, 0, 'f', 2));
-    m_lblAngle->setText(QString("%1°").arg(angle, 0, 'f', 2));
+    if (!result.valid) return;
+    m_lblPhi1->setText(QString("Phi 1: %1°").arg(result.phi, 0, 'f', 2));
+    m_lblPhi2->setText(QString("Phi 2: —"));  // second ROI from separate parse
+    m_lblAngle->setText(QString("%1°").arg(result.phi, 0, 'f', 2));
 }
 
 void MainWindow::onSensorError(const QString &msg)
@@ -434,24 +424,20 @@ void MainWindow::updateConnectButtons(bool connected)
 // ──────────────────────────────────────────────────────────────────────────────
 void MainWindow::onRoi1Changed()
 {
-    RoiConfig roi;
-    roi.xStart = static_cast<float>(m_roi1Start->value());
-    roi.xEnd   = static_cast<float>(m_roi1End->value());
-    m_profileWidget->setRoi(0, roi.xStart, roi.xEnd);
-    if (m_sensorWorker && m_sourceMode == SourceMode::LiveSensor) {
-        m_sensorWorker->updateRoi1(roi);
-    }
+    RoiRect roi1; roi1.xMin = m_roi1Start->value(); roi1.xMax = m_roi1End->value();
+    RoiRect roi2; roi2.xMin = m_roi2Start->value(); roi2.xMax = m_roi2End->value();
+    m_profileWidget->setRoi(0, roi1);
+    if (m_sensorWorker && m_sourceMode == SourceMode::LiveSensor)
+        m_sensorWorker->updateRois(roi1, roi2);
 }
 
 void MainWindow::onRoi2Changed()
 {
-    RoiConfig roi;
-    roi.xStart = static_cast<float>(m_roi2Start->value());
-    roi.xEnd   = static_cast<float>(m_roi2End->value());
-    m_profileWidget->setRoi(1, roi.xStart, roi.xEnd);
-    if (m_sensorWorker && m_sourceMode == SourceMode::LiveSensor) {
-        m_sensorWorker->updateRoi2(roi);
-    }
+    RoiRect roi1; roi1.xMin = m_roi1Start->value(); roi1.xMax = m_roi1End->value();
+    RoiRect roi2; roi2.xMin = m_roi2Start->value(); roi2.xMax = m_roi2End->value();
+    m_profileWidget->setRoi(1, roi2);
+    if (m_sensorWorker && m_sourceMode == SourceMode::LiveSensor)
+        m_sensorWorker->updateRois(roi1, roi2);
 }
 
 void MainWindow::onRoiDrawn(int roiIndex, float xStart, float xEnd)
@@ -462,16 +448,18 @@ void MainWindow::onRoiDrawn(int roiIndex, float xStart, float xEnd)
         m_roi1Start->setValue(xStart);
         m_roi1End->setValue(xEnd);
         if (m_sensorWorker && m_sourceMode == SourceMode::LiveSensor) {
-            RoiConfig roi; roi.xStart = xStart; roi.xEnd = xEnd;
-            m_sensorWorker->updateRoi1(roi);
+            RoiRect r1; r1.xMin = xStart; r1.xMax = xEnd;
+            RoiRect r2; r2.xMin = m_roi2Start->value(); r2.xMax = m_roi2End->value();
+            m_sensorWorker->updateRois(r1, r2);
         }
     } else {
         QSignalBlocker b1(m_roi2Start), b2(m_roi2End);
         m_roi2Start->setValue(xStart);
         m_roi2End->setValue(xEnd);
         if (m_sensorWorker && m_sourceMode == SourceMode::LiveSensor) {
-            RoiConfig roi; roi.xStart = xStart; roi.xEnd = xEnd;
-            m_sensorWorker->updateRoi2(roi);
+            RoiRect r1; r1.xMin = m_roi1Start->value(); r1.xMax = m_roi1End->value();
+            RoiRect r2; r2.xMin = xStart; r2.xMax = xEnd;
+            m_sensorWorker->updateRois(r1, r2);
         }
     }
     statusBar()->showMessage(QString("ROI %1 gesetzt: %2 … %3 mm")
@@ -622,21 +610,16 @@ void MainWindow::loadSettings()
     }
 
     // Sync ROIs to chart
-    m_profileWidget->setRoi(0, static_cast<float>(m_roi1Start->value()),
-                                static_cast<float>(m_roi1End->value()));
-    m_profileWidget->setRoi(1, static_cast<float>(m_roi2Start->value()),
-                                static_cast<float>(m_roi2End->value()));
+    { RoiRect r; r.xMin = m_roi1Start->value(); r.xMax = m_roi1End->value(); m_profileWidget->setRoi(0, r); }
+    { RoiRect r; r.xMin = m_roi2Start->value(); r.xMax = m_roi2End->value(); m_profileWidget->setRoi(1, r); }
 }
 
 void MainWindow::closeEvent(QCloseEvent *event)
 {
     saveSettings();
-    if (m_sensorWorker) {
-        m_sensorWorker->requestStop();
-        if (m_sensorThread) {
-            m_sensorThread->quit();
-            m_sensorThread->wait(3000);
-        }
+    if (m_sensorWorker && m_sensorWorker->isRunning()) {
+        m_sensorWorker->stopCapture();
+        m_sensorWorker->wait(3000);
     }
     m_jsonPlayer->stop();
     event->accept();

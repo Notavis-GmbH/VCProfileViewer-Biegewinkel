@@ -14,8 +14,7 @@
 #include <QMouseEvent>
 #include <QRectF>
 #include <vector>
-
-struct ProfilePoint { float x_mm; float z_mm; };
+#include "vcprotocol.h"  // ProfilePoint defined there
 
 // Region of interest (in sensor world coordinates mm)
 struct RoiRect {

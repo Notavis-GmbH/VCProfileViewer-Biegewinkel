@@ -13,6 +13,7 @@
 #include <QSettings>
 #include <memory>
 
+#include "vcprotocol.h"
 #include "sensorworker.h"
 #include "profilewidget.h"
 #include "jsonplayer.h"
@@ -38,7 +39,7 @@ private slots:
     void onConnectClicked();
     void onDisconnectClicked();
     void onSensorData(const std::vector<ProfilePoint> &points);
-    void onProductResult(float phi1, float phi2, float angle);
+    void onAngleReady(AngleResult result);
     void onSensorError(const QString &msg);
     void onSensorConnected();
     void onSensorDisconnected();
@@ -115,8 +116,7 @@ private:
     QLabel         *m_lblFrameInfo = nullptr;
 
     // ── Backend objects ───────────────────────
-    SensorWorker   *m_sensorWorker = nullptr;
-    QThread        *m_sensorThread = nullptr;
+    SensorWorker   *m_sensorWorker = nullptr;  // SensorWorker is a QThread itself
     JsonPlayer     *m_jsonPlayer   = nullptr;
 
     SourceMode      m_sourceMode   = SourceMode::LiveSensor;

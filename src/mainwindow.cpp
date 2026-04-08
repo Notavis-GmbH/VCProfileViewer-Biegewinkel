@@ -902,6 +902,10 @@ void MainWindow::onConnectClicked()
     connect(m_sensorWorker, &QThread::finished, m_sensorWorker, &QObject::deleteLater);
 
     m_sensorWorker->startCapture(ip, m_editPort->text().toUShort(), roi1, roi2);
+    qInfo().noquote() << QString("[Sensor] Verbindungsversuch: %1:%2  ROI1=[%3..%4]  ROI2=[%5..%6]")
+        .arg(ip).arg(port)
+        .arg(roi1.xMin,'f',1).arg(roi1.xMax,'f',1)
+        .arg(roi2.xMin,'f',1).arg(roi2.xMax,'f',1);
     statusBar()->showMessage("Verbinde mit " + ip + ":" + QString::number(port) + " …");
 }
 
@@ -929,6 +933,7 @@ void MainWindow::onAngleReady(AngleResult /*result*/)
 
 void MainWindow::onSensorError(const QString &msg)
 {
+    qWarning().noquote() << "[Sensor] Fehler:" << msg;
     statusBar()->showMessage("Fehler: " + msg);
     m_lblSensorStatus->setText("Fehler");
     m_lblSensorStatus->setStyleSheet("color:#ff5555; font-weight:bold;");
@@ -936,6 +941,7 @@ void MainWindow::onSensorError(const QString &msg)
 
 void MainWindow::onSensorConnected()
 {
+    qInfo() << "[Sensor] Verbunden:" << m_editIp->text() << "Port" << m_editPort->text();
     updateConnectButtons(true);
     m_lblSensorStatus->setText("Verbunden");
     m_lblSensorStatus->setStyleSheet("color:#00e676; font-weight:bold;");
@@ -944,6 +950,7 @@ void MainWindow::onSensorConnected()
 
 void MainWindow::onSensorDisconnected()
 {
+    qWarning() << "[Sensor] Verbindung getrennt";
     updateConnectButtons(false);
     m_lblSensorStatus->setText("Getrennt");
     m_lblSensorStatus->setStyleSheet("color:#ff5555; font-weight:bold;");
@@ -1070,6 +1077,8 @@ void MainWindow::onJsonFrameChanged(int index, int total)
 
 void MainWindow::onJsonFolderLoaded(int frameCount)
 {
+    qInfo().noquote() << QString("[JSON] Ordner geladen: %1 Frames  Pfad: %2")
+        .arg(frameCount).arg(m_editFolder->text());
     m_lblFrameInfo->setText(QString("%1 Dateien geladen").arg(frameCount));
     statusBar()->showMessage(QString("JSON-Ordner geladen: %1 Frames – Play drücken zum Abspielen").arg(frameCount));
     m_btnPlay->setEnabled(frameCount > 0);
@@ -1339,8 +1348,11 @@ void MainWindow::writePreset(const QString &name)
 void MainWindow::applyPreset(const QString &name)
 {
     QSettings ps(presetsPath(), QSettings::IniFormat);
-    if (!ps.childGroups().contains(name)) return;
-
+    if (!ps.childGroups().contains(name)) {
+        qWarning().noquote() << "[Preset] Typ nicht gefunden:" << name;
+        return;
+    }
+    qInfo().noquote() << "[Preset] Lade Typ:" << name;
     m_presetLoading = true;
 
     ps.beginGroup(name);
@@ -1610,6 +1622,7 @@ void MainWindow::onLogToggle(bool checked)
 {
     if (checked) {
         QString p = m_editLogPath->text().trimmed();
+        qInfo().noquote() << "[MeasLog] Aufzeichnung starten:" << p;
         if (p.isEmpty()) {
             p = QDir(QApplication::applicationDirPath()).filePath(
                 QString("Logs/MeasLog_%1.csv")

@@ -293,8 +293,7 @@ void SensorWorker::run()
                     memcpy(&x, base + i * 8,     4);
                     memcpy(&z, base + i * 8 + 4, 4);
                     if (x > -9999.f && z > -9999.f)
-                        pts.push_back({static_cast<double>(x),
-                                       static_cast<double>(z)});
+                        pts.push_back({x, z});
                 }
                 qDebug().noquote() << QString("[Sensor] Profile: %1 valid points (cnt=%2)")
                     .arg(pts.size()).arg(cnt);

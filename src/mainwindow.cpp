@@ -952,6 +952,7 @@ void MainWindow::onDisconnectClicked()
 
 void MainWindow::onSensorData(const std::vector<ProfilePoint> &points)
 {
+    m_lastProfilePts = points;
     m_profileWidget->updateProfile(points);
     computeAndDisplayFitLines(points);
 }
@@ -1131,6 +1132,7 @@ void MainWindow::onJsonPlaybackStopped()
 
 void MainWindow::onJsonProfileReady(const std::vector<ProfilePoint> &points)
 {
+    m_lastProfilePts = points;
     m_profileWidget->updateProfile(points);
     computeAndDisplayFitLines(points);
 }
@@ -1635,8 +1637,9 @@ void MainWindow::onQuadrantSelected(AngleQuadrant q)
     m_btnQuadBR->setChecked(q == AngleQuadrant::BottomRight);
     // Update chart arc
     m_profileWidget->setAngleQuadrant(q);
-    // Recompute displayed angle immediately
-    computeAndDisplayFitLines();
+    // Recompute with cached last frame so angle updates immediately
+    if (!m_lastProfilePts.empty())
+        computeAndDisplayFitLines(m_lastProfilePts);
 }
 
 void MainWindow::closeEvent(QCloseEvent *event)

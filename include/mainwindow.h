@@ -1,4 +1,5 @@
 #pragma once
+#include <vector>
 
 #include <QMainWindow>
 #include <QLabel>
@@ -138,6 +139,7 @@ private:
     QPushButton    *m_btnQuadBL    = nullptr;  // bottom-left
     QPushButton    *m_btnQuadBR    = nullptr;  // bottom-right
     AngleQuadrant   m_angleQuadrant = AngleQuadrant::TopLeft;
+    std::vector<ProfilePoint> m_lastProfilePts;  // cached for quadrant re-computation
 
     // JSON playback group
     QGroupBox      *m_playbackGroup= nullptr;

@@ -51,19 +51,14 @@ endif()
 target_include_directories(VC3DProfileViewer PRIVATE include)
 target_link_libraries(VC3DProfileViewer PRIVATE ${QT_TARGET})
 
-# ── Embed resources (logo SVG) ────────────────────────────────────────────────
-if(COMMAND qt_add_resources)
-    # Qt6 style
-    qt_add_resources(VC3DProfileViewer "app_resources"
-        PREFIX "/images"
-        BASE "${CMAKE_SOURCE_DIR}/resources"
-        FILES resources/logo_notavis.svg
-    )
+# ── Embed resources (logo SVG) via QRC ───────────────────────────────────────
+# Use qt_add_resources (Qt6) or qt5_add_resources (Qt5) with the QRC file
+if(Qt6_FOUND)
+    qt6_add_resources(RESOURCE_FILES "${CMAKE_SOURCE_DIR}/resources/resources.qrc")
 else()
-    # Qt5 style
-    qt5_add_resources(RESOURCE_FILES resources/resources.qrc)
-    target_sources(VC3DProfileViewer PRIVATE ${RESOURCE_FILES})
+    qt5_add_resources(RESOURCE_FILES "${CMAKE_SOURCE_DIR}/resources/resources.qrc")
 endif()
+target_sources(VC3DProfileViewer PRIVATE ${RESOURCE_FILES})
 
 # ── Output directory ──────────────────────────────────────────────────────────
 # Release build goes to bin/Release – you then run windeployqt there

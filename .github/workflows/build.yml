@@ -60,12 +60,9 @@ jobs:
     - name: Configure CMake
       shell: pwsh
       run: |
-        $ts = Get-Date -Format "yyyy-MM-dd HH:mm"
-        cmake -B build `
-          -G "NMake Makefiles" `
-          -DCMAKE_BUILD_TYPE=Release `
-          -DCMAKE_PREFIX_PATH="C:\Qt\6.8.1\msvc2022_64" `
-          "-DBUILD_TIMESTAMP=$ts"
+        $ts = Get-Date -Format "yyyy-MM-dd-HHmm"
+        Write-Host "Build timestamp: $ts"
+        cmake -B build -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=Release "-DCMAKE_PREFIX_PATH=C:\Qt\6.8.1\msvc2022_64" "-DBUILD_TIMESTAMP=$ts"
 
     # ── 7. Bauen ──────────────────────────────────────────────────────────────
     - name: Build
@@ -102,9 +99,18 @@ jobs:
             Copy-Item -Path "tests\data\*" -Destination "$pkg\TestData" -Force
         }
         Copy-Item README.txt $pkg -Force
+        # Copy SVG resources for watermark
+        if (Test-Path "${{ env.EXE_DIR }}\resources") {
+            New-Item -ItemType Directory "$pkg\resources" -Force | Out-Null
+            Copy-Item -Path "${{ env.EXE_DIR }}\resources\*" -Destination "$pkg\resources" -Force
+        } elseif (Test-Path "resources\logo_notavis.svg") {
+            New-Item -ItemType Directory "$pkg\resources" -Force | Out-Null
+            Copy-Item "resources\logo_notavis.svg" "$pkg\resources\" -Force
+        }
         $sha = "${{ github.sha }}".Substring(0,7)
         $ts  = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd HH:mm UTC")
-        "VC3DProfileViewer v2.0`nBranch: ${{ github.ref_name }}`nCommit: $sha`nBuilt : $ts" |
+        $ver = "v2.2-$ts"
+        "VC3DProfileViewer $ver`nBranch: ${{ github.ref_name }}`nCommit: $sha`nBuilt : $ts UTC" |
           Out-File -Encoding utf8 "$pkg\VERSION.txt"
 
     # ── 10. Artefakt hochladen (immer, 30 Tage) ───────────────────────────────

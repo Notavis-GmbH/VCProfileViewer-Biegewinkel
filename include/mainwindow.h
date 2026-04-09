@@ -140,6 +140,8 @@ private:
     QPushButton    *m_btnQuadBR    = nullptr;  // bottom-right
     AngleQuadrant   m_angleQuadrant = AngleQuadrant::TopLeft;
     std::vector<ProfilePoint> m_lastProfilePts;  // cached for quadrant re-computation
+    QElapsedTimer   m_fitRateTimer;  // throttle fit computation to ~30 Hz
+    bool            m_fitPending = false;
 
     // JSON playback group
     QGroupBox      *m_playbackGroup= nullptr;

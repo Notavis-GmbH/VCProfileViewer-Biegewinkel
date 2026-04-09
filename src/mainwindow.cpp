@@ -447,6 +447,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     // Measurement logger
     m_logger = new MeasurementLogger(this);
+    m_fitRateTimer.start();
     connect(m_logger, &MeasurementLogger::rowWritten,  this, &MainWindow::onLogRowWritten);
     connect(m_logger, &MeasurementLogger::logOpened,   this, [this]{ m_lblLogStatus->setText("<b style='color:#00e676'>● Aufzeichnung: 0 Zeilen</b>"); });
     connect(m_logger, &MeasurementLogger::logClosed,   this, [this]{ m_lblLogStatus->setText("Bereit"); m_btnLogToggle->setChecked(false); m_btnLogToggle->setText("● Aufzeichnung starten"); m_btnLogToggle->setStyleSheet("background:#1a5c2e; color:white; padding:5px; border-radius:4px;"); });
@@ -954,7 +955,11 @@ void MainWindow::onSensorData(const std::vector<ProfilePoint> &points)
 {
     m_lastProfilePts = points;
     m_profileWidget->updateProfile(points);
-    computeAndDisplayFitLines(points);
+    // Throttle fit computation to ~30 Hz to keep UI responsive
+    if (m_fitRateTimer.elapsed() >= 33) {
+        m_fitRateTimer.restart();
+        computeAndDisplayFitLines(points);
+    }
 }
 
 void MainWindow::onAngleReady(AngleResult /*result*/)
@@ -1006,6 +1011,11 @@ void MainWindow::onRoi1Changed()
     m_profileWidget->setRoi(0, roi1);
     if (m_sensorWorker && m_sourceMode == SourceMode::LiveSensor)
         m_sensorWorker->updateRois(roi1, roi2);
+    // Recompute fit with cached frame so result updates immediately
+    if (!m_lastProfilePts.empty()) {
+        m_fitRateTimer.restart();
+        computeAndDisplayFitLines(m_lastProfilePts);
+    }
 }
 
 void MainWindow::onRoi2Changed()
@@ -1017,6 +1027,10 @@ void MainWindow::onRoi2Changed()
     m_profileWidget->setRoi(1, roi2);
     if (m_sensorWorker && m_sourceMode == SourceMode::LiveSensor)
         m_sensorWorker->updateRois(roi1, roi2);
+    if (!m_lastProfilePts.empty()) {
+        m_fitRateTimer.restart();
+        computeAndDisplayFitLines(m_lastProfilePts);
+    }
 }
 
 void MainWindow::onRoiDrawn(int roiIndex, RoiRect r)
@@ -1134,7 +1148,10 @@ void MainWindow::onJsonProfileReady(const std::vector<ProfilePoint> &points)
 {
     m_lastProfilePts = points;
     m_profileWidget->updateProfile(points);
-    computeAndDisplayFitLines(points);
+    if (m_fitRateTimer.elapsed() >= 33) {
+        m_fitRateTimer.restart();
+        computeAndDisplayFitLines(points);
+    }
 }
 
 void MainWindow::computeAndDisplayFitLines(const std::vector<ProfilePoint> &pts)

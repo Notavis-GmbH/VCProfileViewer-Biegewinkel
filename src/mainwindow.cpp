@@ -1677,10 +1677,14 @@ void MainWindow::loadSettings()
         }
     }
 
-    if (m_spinTargetAngle)
-        m_spinTargetAngle->setValue(s.value("Angle/Target",    90.0).toDouble());
-    if (m_spinTolerance)
-        m_spinTolerance->setValue(  s.value("Angle/Tolerance",  0.5).toDouble());
+    // Angle settings – read from file if it exists, otherwise keep defaults
+    {
+        QSettings s2(settingsPath(), QSettings::IniFormat);
+        if (m_spinTargetAngle)
+            m_spinTargetAngle->setValue(s2.value("Angle/Target",    90.0).toDouble());
+        if (m_spinTolerance)
+            m_spinTolerance->setValue(  s2.value("Angle/Tolerance",  0.5).toDouble());
+    }
 
     // Populate preset combo
     refreshPresetCombo();

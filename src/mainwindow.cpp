@@ -443,7 +443,11 @@ static FitLine fitLine(const std::vector<ProfilePoint> &pts,
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
 {
-    setWindowTitle("VC 3D Profile Viewer  v2.2");
+#ifndef BUILD_TIMESTAMP
+#  define BUILD_TIMESTAMP "dev"
+#endif
+    setWindowTitle(QString("VC 3D Profile Viewer  v2.2-%1")
+                   .arg(QString(BUILD_TIMESTAMP).replace(" ","-").replace(":","")));
     setMinimumSize(1100, 700);
 
     // JSON player (no thread needed – all Qt slots, no blocking I/O)

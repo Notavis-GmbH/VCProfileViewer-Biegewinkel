@@ -482,9 +482,10 @@ void MainWindow::buildUi()
     // ── LEFT PANEL ────────────────────────────────────────────────────────
     QScrollArea *scroll = new QScrollArea;
     scroll->setWidgetResizable(true);
-    scroll->setMinimumWidth(280);
-    scroll->setMaximumWidth(320);
+    scroll->setMinimumWidth(260);
+    scroll->setMaximumWidth(400);  // wider to fit all controls
     scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scroll->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
 
     QWidget     *leftPanel  = new QWidget;
     QVBoxLayout *leftLayout = new QVBoxLayout(leftPanel);
@@ -601,6 +602,8 @@ void MainWindow::buildUi()
     splitter->addWidget(m_profileWidget);
     splitter->setStretchFactor(0, 0);
     splitter->setStretchFactor(1, 1);
+    splitter->setSizes({340, 900});   // initial left panel width
+    splitter->setCollapsible(0, false); // prevent left panel from collapsing to 0
 
     // Connect ROI draw from chart to spinboxes
     connect(m_profileWidget, &ProfileWidget::roiChanged,

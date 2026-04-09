@@ -600,33 +600,72 @@ void ProfileChartView::drawAngleArc(QPainter &painter)
     //   2 BottomLeft:  between L1_left  and L2_right  (L1 left,  L2 right)
     //   3 BottomRight: between L1_right and L2_right  (both lines going right)
 
-    double ang1r = std::atan2(-s1,  1.0) * 180.0 / M_PI;  // L1 rightward screen angle
-    double ang2r = std::atan2(-s2,  1.0) * 180.0 / M_PI;  // L2 rightward screen angle
-    double ang1l = ang1r + 180.0;  // L1 leftward
-    double ang2l = ang2r + 180.0;  // L2 leftward
+    // L1 and L2 each have two rays from the intersection.
+    // ang_r = rightward (chart +X direction), ang_l = leftward (chart -X direction)
+    // In screen space: chart +X = screen +X, chart +Z = screen -Y (Z inverted)
+    double ang1r = std::atan2(-s1, 1.0) * 180.0 / M_PI;
+    double ang2r = std::atan2(-s2, 1.0) * 180.0 / M_PI;
+    // Normalise both to [0, 360)
+    while (ang1r < 0) ang1r += 360.0;
+    while (ang2r < 0) ang2r += 360.0;
+    double ang1l = ang1r + 180.0;
+    double ang2l = ang2r + 180.0;
+    // All four sector boundaries, normalised to [0,360)
+    // Sectors go CCW in Qt convention; we always sweep the SHORT arc (<180 deg)
+    // between the two bounding rays of the chosen quadrant.
+    //
+    // The 4 rays divide the full circle into 4 sectors.
+    // Sort them to find the 4 sector start/end pairs:
+    double rays[4] = { ang1r, ang2r, ang1l, ang2l };
+    // Sort
+    for (int i=0;i<3;i++) for (int j=i+1;j<4;j++) if (rays[j]<rays[i]) std::swap(rays[i],rays[j]);
+    // The 4 sectors (CCW) between consecutive sorted rays:
+    // sector[k] = rays[k] to rays[(k+1)%4], span = rays[(k+1)%4] - rays[k]  (mod 360 for last)
+    //
+    // Each sector belongs to one quadrant. Identify which:
+    // A sector's midpoint angle tells us which "half" of each line it's in.
+    // Mid-angle m: line is in "right" half if the angle to that line's right ray < 90 deg.
+    //
+    // Quadrant mapping:
+    //   L1_right + L2_right -> BottomRight (both right halves)
+    //   L1_left  + L2_right -> BottomLeft
+    //   L1_right + L2_left  -> TopRight
+    //   L1_left  + L2_left  -> TopLeft
 
-    double r1, r2;
-    switch (m_angleQuadrant) {
-        case AngleQuadrant::TopLeft:
-            r1 = ang1l;  r2 = ang2l;  break;
-        case AngleQuadrant::TopRight:
-            r1 = ang1r;  r2 = ang2l;  break;
-        case AngleQuadrant::BottomLeft:
-            r1 = ang1l;  r2 = ang2r;  break;
-        case AngleQuadrant::BottomRight:
-        default:
-            r1 = ang1r;  r2 = ang2r;  break;
+    double startAngle = ang1r, spanAngle = ang2r - ang1r;  // fallback
+
+    for (int k = 0; k < 4; k++) {
+        double a = rays[k];
+        double b = (k == 3) ? rays[0] + 360.0 : rays[k+1];
+        double span = b - a;
+        double mid  = a + span * 0.5;
+        while (mid >= 360.0) mid -= 360.0;
+
+        // Determine which half of L1 and L2 the mid-angle falls in
+        auto angDiff = [](double a, double b) -> double {
+            double d = std::fmod(std::abs(a - b), 360.0);
+            return d > 180.0 ? 360.0 - d : d;
+        };
+        bool l1Right = (angDiff(mid, ang1r) < angDiff(mid, ang1l));
+        bool l2Right = (angDiff(mid, ang2r) < angDiff(mid, ang2l));
+
+        AngleQuadrant sectorQ;
+        if      ( l1Right &&  l2Right) sectorQ = AngleQuadrant::BottomRight;
+        else if (!l1Right &&  l2Right) sectorQ = AngleQuadrant::BottomLeft;
+        else if ( l1Right && !l2Right) sectorQ = AngleQuadrant::TopRight;
+        else                           sectorQ = AngleQuadrant::TopLeft;
+
+        if (sectorQ == m_angleQuadrant) {
+            startAngle = a;
+            spanAngle  = span;
+            break;
+        }
     }
 
-    // Normalise so span is in (-180, 180) and sweep is the shorter arc
-    while (r2 - r1 >  180.0) r2 -= 360.0;
-    while (r2 - r1 < -180.0) r2 += 360.0;
-
-    // Qt drawPie: CCW positive, 1/16 deg from +X screen-right
-    // Screen Y is DOWN so negate to convert from math CCW to Qt CCW
+    // Qt drawPie: CCW positive from +X, 1/16 deg; screen Y down so negate
     const int R = 44;
-    int qtStart = static_cast<int>(-r1 * 16.0);
-    int qtSpan  = static_cast<int>(-(r2 - r1) * 16.0);
+    int qtStart = static_cast<int>(-startAngle * 16.0);
+    int qtSpan  = static_cast<int>(-spanAngle  * 16.0);
 
     painter.setPen(QPen(QColor(255, 220, 0), 2));
     painter.setBrush(QBrush(QColor(255, 220, 0, 50)));

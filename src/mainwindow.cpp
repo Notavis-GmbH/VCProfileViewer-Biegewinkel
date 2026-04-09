@@ -1197,10 +1197,18 @@ void MainWindow::computeAndDisplayFitLines(const std::vector<ProfilePoint> &pts)
             default:                return QStringLiteral("OLS");
         }
     };
+    // Apply quadrant to get the display angle (same value as left panel)
+    double displayBending = std::abs(bendingAngle);
+    if (fl1.valid && fl2.valid) {
+        if (m_angleQuadrant == AngleQuadrant::TopRight ||
+            m_angleQuadrant == AngleQuadrant::BottomLeft)
+            displayBending = 180.0 - displayBending;
+    }
+
     m_profileWidget->setFitLabels(
         fl1.valid ? inlineMethodName(m1, fl1) : QString(),
         fl2.valid ? inlineMethodName(m2, fl2) : QString(),
-        bendingAngle);
+        displayBending);
 
     // Update Auto-mode labels (show which method was actually chosen)
     auto updateMethodLabel = [](QLabel *lbl, FitMethod requested, const FitLine &fl) {
@@ -1241,7 +1249,7 @@ void MainWindow::computeAndDisplayFitLines(const std::vector<ProfilePoint> &pts)
         entry.inlier2        = (fl2.valid && m2 == FitMethod::Auto) ? fl2.autoInfo.inlierRatioRansac : -1.0;
         entry.roi2Start_mm   = m_roi2Start->value();
         entry.roi2End_mm     = m_roi2End->value();
-        entry.bendingAngle_deg = std::abs(bendingAngle);
+        entry.bendingAngle_deg = displayBending;  // quadrant-corrected value
         entry.hasBending     = fl1.valid && fl2.valid;
         m_logger->append(entry);
     }

@@ -573,6 +573,10 @@ void ProfileChartView::drawAngleArc(QPainter &painter)
         if ((axZ->max() - axZ->min()) < 1e-9) return;
     }
 
+    // Also guard plotArea size (can be zero during resize/fullscreen transition)
+    QRectF pa2 = chart()->plotArea();
+    if (pa2.width() < 10 || pa2.height() < 10) return;
+
     double s1 = m_hmLine1.slope, b1 = m_hmLine1.intercept;
     double s2 = m_hmLine2.slope, b2 = m_hmLine2.intercept;
     if (std::abs(s2 - s1) < 1e-9) return;
@@ -582,54 +586,69 @@ void ProfileChartView::drawAngleArc(QPainter &painter)
     double zi = s1 * xi + b1;
     QPoint ip = chartToWidget(xi, zi);
 
-    // Screen-space direction vectors for each line (pointing right = +X screen)
-    QPoint p1a = chartToWidget(m_hmLine1.xMin, s1*m_hmLine1.xMin+b1);
-    QPoint p1b = chartToWidget(m_hmLine1.xMax, s1*m_hmLine1.xMax+b1);
-    QPoint p2a = chartToWidget(m_hmLine2.xMin, s2*m_hmLine2.xMin+b2);
-    QPoint p2b = chartToWidget(m_hmLine2.xMax, s2*m_hmLine2.xMax+b2);
+    // For each line, compute TWO ray directions from the intersection (screen pixels).
+    // Ray "A" points toward xMax end, Ray "B" points toward xMin end.
+    QPoint p1min = chartToWidget(m_hmLine1.xMin, s1*m_hmLine1.xMin+b1);
+    QPoint p1max = chartToWidget(m_hmLine1.xMax, s1*m_hmLine1.xMax+b1);
+    QPoint p2min = chartToWidget(m_hmLine2.xMin, s2*m_hmLine2.xMin+b2);
+    QPoint p2max = chartToWidget(m_hmLine2.xMax, s2*m_hmLine2.xMax+b2);
 
-    // Direction angles in screen degrees (screen Y inverted vs math)
-    // ang = angle of the "rightward" direction of each line
-    double ang1r = std::atan2(p1b.y()-p1a.y(), p1b.x()-p1a.x()) * 180.0/M_PI;
-    double ang2r = std::atan2(p2b.y()-p2a.y(), p2b.x()-p2a.x()) * 180.0/M_PI;
+    // Screen angles for the two directions of each line (degrees, screen CW from right)
+    double ang1max = std::atan2(p1max.y()-ip.y(), p1max.x()-ip.x()) * 180.0/M_PI;
+    double ang1min = std::atan2(p1min.y()-ip.y(), p1min.x()-ip.x()) * 180.0/M_PI;
+    double ang2max = std::atan2(p2max.y()-ip.y(), p2max.x()-ip.x()) * 180.0/M_PI;
+    double ang2min = std::atan2(p2min.y()-ip.y(), p2min.x()-ip.x()) * 180.0/M_PI;
 
-    // Each line has two ray directions from the intersection.
-    // We select two rays that bound the requested quadrant:
-    //   TopLeft    -> ray going LEFT  from line1 + ray going LEFT  from line2
-    //   TopRight   -> ray going RIGHT from line1 + ray going LEFT  from line2
-    //   BottomLeft -> ray going LEFT  from line1 + ray going RIGHT from line2
-    //   BottomRight-> ray going RIGHT from line1 + ray going RIGHT from line2
+    // Choose one ray from each line based on which quadrant (chart coords):
+    // TopLeft    = X<xi, Z>zi  -> screen: left, up    -> screen Y smaller (Y inverted)
+    // TopRight   = X>xi, Z>zi  -> screen: right, up
+    // BottomLeft = X<xi, Z<zi  -> screen: left, down
+    // BottomRight= X>xi, Z<zi  -> screen: right, down
     //
-    // "LEFT" = ang+180, "RIGHT" = ang (rightward = toward larger X in screen)
-    // We determine which direction of each line goes into the requested quadrant
-    // by checking if the intersection is to the left or right of centre.
+    // For each line pick the ray that points INTO the requested quadrant from xi,zi.
+    // "into quadrant" means: for TopLeft -> screen dx<0 AND screen dy<0
 
-    double r1, r2;  // the two bounding ray angles (screen degrees)
+    auto pickRay = [&](double angMax, double angMin,
+                       bool wantLeft, bool wantUp) -> double {
+        // wantLeft: screen X < ip.x  wantUp: screen Y < ip.y (inverted)
+        auto score = [&](double ang) -> int {
+            double dx = std::cos(ang * M_PI / 180.0);
+            double dy = std::sin(ang * M_PI / 180.0);
+            int ok = 0;
+            if (wantLeft  && dx < -0.05) ok++;
+            if (!wantLeft && dx >  0.05) ok++;
+            if (wantUp    && dy < -0.05) ok++;
+            if (!wantUp   && dy >  0.05) ok++;
+            return ok;
+        };
+        return (score(angMax) >= score(angMin)) ? angMax : angMin;
+    };
+
+    bool wantLeft1, wantUp1, wantLeft2, wantUp2;
     switch (m_angleQuadrant) {
         case AngleQuadrant::TopLeft:
-            r1 = ang1r + 180.0;  r2 = ang2r + 180.0;  break;
+            wantLeft1=true;  wantUp1=true;  wantLeft2=true;  wantUp2=true;  break;
         case AngleQuadrant::TopRight:
-            r1 = ang1r;          r2 = ang2r + 180.0;  break;
+            wantLeft1=false; wantUp1=true;  wantLeft2=false; wantUp2=true;  break;
         case AngleQuadrant::BottomLeft:
-            r1 = ang1r + 180.0;  r2 = ang2r;          break;
+            wantLeft1=true;  wantUp1=false; wantLeft2=true;  wantUp2=false; break;
         case AngleQuadrant::BottomRight:
         default:
-            r1 = ang1r;          r2 = ang2r;          break;
+            wantLeft1=false; wantUp1=false; wantLeft2=false; wantUp2=false; break;
     }
 
-    // Normalise r2 relative to r1 so span is in (-360,360)
+    double r1 = pickRay(ang1max, ang1min, wantLeft1, wantUp1);
+    double r2 = pickRay(ang2max, ang2min, wantLeft2, wantUp2);
+
+    // Normalise span so it sweeps through the correct quadrant (max 180 deg)
     while (r2 - r1 >  180.0) r2 -= 360.0;
     while (r2 - r1 < -180.0) r2 += 360.0;
 
-    double startDeg = r1;
-    double spanDeg  = r2 - r1;
-
-    // Qt drawPie: angles in 1/16 degree, CCW from +X screen-right
-    // Screen Y inverted -> Qt is already in screen space (CW = negative span)
-    // Invert Y because Qt measures CCW but screen Y points down
+    // Qt drawPie: CCW positive, angle in 1/16 deg from +X rightward (screen)
+    // Screen Y is DOWN, so CCW in screen = CW in math -> negate both
     const int R = 44;
-    int qtStart = static_cast<int>(-startDeg * 16.0);
-    int qtSpan  = static_cast<int>(-spanDeg  * 16.0);
+    int qtStart = static_cast<int>(-r1 * 16.0);
+    int qtSpan  = static_cast<int>(-(r2 - r1) * 16.0);
 
     painter.setPen(QPen(QColor(255, 220, 0), 2));
     painter.setBrush(QBrush(QColor(255, 220, 0, 50)));
@@ -643,7 +662,6 @@ void ProfileChartView::drawAngleArc(QPainter &painter)
     painter.setFont(lf);
     QFontMetrics lfm(lf);
     int lw = lfm.horizontalAdvance(label) + 10, lh = lfm.height() + 4;
-    // Place label left or right depending on quadrant
     int lx = (m_angleQuadrant == AngleQuadrant::TopLeft ||
               m_angleQuadrant == AngleQuadrant::BottomLeft)
              ? ip.x() - R - lw - 4
@@ -655,8 +673,6 @@ void ProfileChartView::drawAngleArc(QPainter &painter)
     painter.setPen(QColor(255, 220, 0));
     painter.setBrush(Qt::NoBrush);
     painter.drawText(lx + 4, ly + lfm.ascent() + 2, label);
-
-    // Dot at intersection
     painter.setPen(Qt::NoPen);
     painter.setBrush(QColor(255, 220, 0, 200));
     painter.drawEllipse(ip, 4, 4);

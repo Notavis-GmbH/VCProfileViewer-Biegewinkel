@@ -1286,7 +1286,16 @@ void MainWindow::updateAngleDisplay(const FitLine &fl1, const FitLine &fl2)
         double delta = fl2.phi - fl1.phi;
         while (delta >  180.0) delta -= 360.0;
         while (delta < -180.0) delta += 360.0;
-        // Apply quadrant: TopLeft/BottomRight give the supplementary angle
+        // The raw delta is the angle between the two lines (always 0..180).
+        // Depending on which quadrant the user wants to measure:
+        //   Acute side  (the smaller angle): use |delta| directly
+        //   Obtuse side (the larger angle):  use 180 - |delta|
+        // Which quadrant is "acute" depends on the actual geometry,
+        // but as a convention matching the arc display:
+        //   TopLeft + BottomRight = same sector (one of the two)
+        //   TopRight + BottomLeft = opposite sector
+        // We simply show |delta| for TL/BR and (180-|delta|) for TR/BL.
+        // The arc in the chart always shows the correct visual sector.
         double displayAngle = std::abs(delta);
         if (m_angleQuadrant == AngleQuadrant::TopRight ||
             m_angleQuadrant == AngleQuadrant::BottomLeft) {

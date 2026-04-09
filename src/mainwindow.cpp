@@ -443,7 +443,7 @@ static FitLine fitLine(const std::vector<ProfilePoint> &pts,
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
 {
-    setWindowTitle("VC 3D Profile Viewer  v2.1");
+    setWindowTitle("VC 3D Profile Viewer  v2.2");
     setMinimumSize(1100, 700);
 
     // JSON player (no thread needed – all Qt slots, no blocking I/O)
@@ -801,11 +801,21 @@ void MainWindow::buildPresetGroup(QWidget * /*parent*/, QVBoxLayout *layout)
 
     layout->addWidget(m_presetGroup);
 
+    // Lock button
+    m_btnLock = new QPushButton("🔓  Einstellungen sperren");
+    m_btnLock->setCheckable(true);
+    m_btnLock->setStyleSheet(
+        "QPushButton { background:#2a2a2a; color:#ccc; padding:5px; border-radius:4px; }"
+        "QPushButton:checked { background:#5c3a00; color:#ffd600; border:1px solid #ffd600; }");
+    m_btnLock->setToolTip("Alle Einstellungen sperren – verhindert versehentliche Änderungen");
+    vbl->addWidget(m_btnLock);
+
     connect(m_cmbPresets,    QOverload<int>::of(&QComboBox::activated),
             this, &MainWindow::onPresetSelected);
     connect(m_btnPresetSave, &QPushButton::clicked, this, &MainWindow::onPresetSave);
     connect(m_btnPresetRen,  &QPushButton::clicked, this, &MainWindow::onPresetRename);
     connect(m_btnPresetDel,  &QPushButton::clicked, this, &MainWindow::onPresetDelete);
+    connect(m_btnLock,       &QPushButton::toggled, this, &MainWindow::onLockToggle);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1598,10 +1608,10 @@ void MainWindow::applyPreset(const QString &name)
     }
     m_speedSlider->setValue(   ps.value("Playback_Speed",   5).toInt());
     onSpeedSliderChanged(m_speedSlider->value());
-    const int mode = ps.value("Source_Mode", 0).toInt();
-    if (mode == 1) { m_rbPlayback->setChecked(true); m_sourceMode = SourceMode::JsonPlayback; }
-    else           { m_rbLive->setChecked(true);     m_sourceMode = SourceMode::LiveSensor;   }
-    applySourceMode();
+    // Store the source mode from preset but DON'T auto-switch or auto-start.
+    // User stays in their current mode until they manually switch.
+    const int presetMode = ps.value("Source_Mode", 0).toInt();
+    // Only update the folder path (for reference), not the active mode
     const QString logPath = ps.value("Log_Path", "").toString();
     if (!logPath.isEmpty()) m_editLogPath->setText(logPath);
     ps.endGroup();
@@ -1610,15 +1620,14 @@ void MainWindow::applyPreset(const QString &name)
     { RoiRect r; r.xMin = m_roi1Start->value(); r.xMax = m_roi1End->value(); r.valid = (r.xMax > r.xMin); m_profileWidget->setRoi(0, r); }
     { RoiRect r; r.xMin = m_roi2Start->value(); r.xMax = m_roi2End->value(); r.valid = (r.xMax > r.xMin); m_profileWidget->setRoi(1, r); }
 
-    // Auto-load JSON folder if in playback mode and folder exists
-    if (m_sourceMode == SourceMode::JsonPlayback && !folder.isEmpty() && QDir(folder).exists()) {
-        qInfo().noquote() << "[Preset] Lade JSON-Ordner automatisch:" << folder;
-        m_jsonPlayer->loadFolder(folder);
-    }
+    // Update folder field but don't load/play – user decides when to start
+    if (!folder.isEmpty() && presetMode == 1)
+        m_editFolder->setText(folder);
 
     m_presetLoading = false;
 
-    statusBar()->showMessage(QString("Typ geladen: %1").arg(name), 3000);
+    statusBar()->showMessage(
+        QString("Typ geladen: %1  (Quelle nicht automatisch gestartet)").arg(name), 4000);
 }
 
 void MainWindow::onPresetSelected(int index)
@@ -1816,8 +1825,28 @@ void MainWindow::loadSettings()
             ps.setValue("Source_Mode",     1);     // JSON Wiedergabe
             ps.setValue("Log_Path",        defaultLogPath);
             ps.endGroup();
-            ps.sync();
         }
+
+        // Seed "TestTyp_1" preset with actual recording settings
+        if (!ps.childGroups().contains("TestTyp_1")) {
+            const QString recPath =
+                QDir(QApplication::applicationDirPath()).filePath("TestData");
+            ps.beginGroup("TestTyp_1");
+            ps.setValue("Sensor_IP",       "192.168.3.15");
+            ps.setValue("Sensor_Port",     "1096");
+            ps.setValue("ROI1_Start",      -38.0);
+            ps.setValue("ROI1_End",          0.0);
+            ps.setValue("ROI1_Method",       2);    // Hough
+            ps.setValue("ROI2_Start",        0.0);
+            ps.setValue("ROI2_End",        106.0);
+            ps.setValue("ROI2_Method",       2);    // Hough
+            ps.setValue("Playback_Folder", recPath);
+            ps.setValue("Playback_Speed",    5);    // 1.0x
+            ps.setValue("Source_Mode",       1);    // JSON Wiedergabe
+            ps.setValue("Log_Path",          QString());
+            ps.endGroup();
+        }
+        ps.sync();
     }
 
     // Populate preset combo
@@ -1837,6 +1866,34 @@ void MainWindow::onQuadrantSelected(AngleQuadrant q)
     // Recompute with cached last frame so angle updates immediately
     if (!m_lastProfilePts.empty())
         computeAndDisplayFitLines(m_lastProfilePts);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Lock / Unlock – sperrt alle Einstellungs-Widgets
+// ─────────────────────────────────────────────────────────────────────────────
+void MainWindow::onLockToggle(bool locked)
+{
+    m_locked = locked;
+    m_btnLock->setText(locked ? "🔒  Gesperrt – zum Entsperren klicken"
+                               : "🔓  Einstellungen sperren");
+
+    // All widgets to lock/unlock
+    const QList<QWidget*> lockable = {
+        m_editIp, m_editPort,
+        m_roi1Start, m_roi1End, m_roi1Method,
+        m_roi2Start, m_roi2End, m_roi2Method,
+        m_editFolder, m_speedSlider,
+        m_rbLive, m_rbPlayback,
+        m_editLogPath, m_btnLogBrowse, m_btnLogToggle,
+        m_editRecordFolder, m_btnRecordBrowse, m_btnRecordToggle,
+        m_cmbPresets, m_btnPresetSave, m_btnPresetRen, m_btnPresetDel,
+        m_spinMaxFrames
+    };
+    for (QWidget *w : lockable)
+        if (w) w->setEnabled(!locked);
+
+    statusBar()->showMessage(
+        locked ? "🔒 Einstellungen gesperrt" : "🔓 Einstellungen entsperrt", 3000);
 }
 
 void MainWindow::closeEvent(QCloseEvent *event)

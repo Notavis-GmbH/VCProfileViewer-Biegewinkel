@@ -83,6 +83,7 @@ private slots:
     void onPresetSave();
     void onPresetRename();
     void onPresetDelete();
+    void onLockToggle(bool checked);
 
 private:
     void buildUi();
@@ -170,6 +171,8 @@ private:
 
     // Preset group
     QGroupBox      *m_presetGroup   = nullptr;
+    QPushButton    *m_btnLock       = nullptr;  // settings lock
+    bool            m_locked        = false;
     QComboBox      *m_cmbPresets    = nullptr;
     QPushButton    *m_btnPresetSave = nullptr;
     QPushButton    *m_btnPresetRen  = nullptr;

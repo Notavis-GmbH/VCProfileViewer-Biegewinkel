@@ -3,6 +3,8 @@
 ****************************************************************************/
 #include "vcprotocol.h"
 #include <cstring>
+#include <QtDebug>
+#include <QString>
 #include <vector>
 #include <chrono>
 #include <thread>
@@ -273,8 +275,30 @@ bool VcProtocol::readDataFrame(int &out_dataMode, int &out_resultCnt,
         // After global header we have VcMetaHeader (16 bytes)
         if (gh.dataLength < static_cast<uint32_t>(sizeof(VcMetaHeader))) continue;
 
+        // --- Hex dump first 64 bytes for layout diagnosis (first 3 frames only) ---
+        static int dumpCount = 0;
+        if (dumpCount < 3) {
+            ++dumpCount;
+            QString hex;
+            int dumpLen = qMin((int)gh.dataLength, 64);
+            for (int di = 0; di < dumpLen; ++di)
+                hex += QString("%1 ").arg(payload[di], 2, 16, QChar('0'));
+            qDebug().noquote() << QString("[Proto] Frame#%1 ghLen=%2 dump: %3")
+                .arg(dumpCount).arg(gh.dataLength).arg(hex);
+            // Also log GH fields
+            qDebug().noquote() << QString("[Proto] GH: sync=%1 counter=%2 error=%3 dataLen=%4")
+                .arg(gh.syncByte, 8, 16, QChar('0'))
+                .arg(gh.counter).arg(gh.error).arg(gh.dataLength);
+        }
+
         VcMetaHeader mh2;
         memcpy(&mh2, payload.data(), sizeof(VcMetaHeader));
+
+        // Log meta header fields
+        if (dumpCount <= 3) {
+            qDebug().noquote() << QString("[Proto] MH: type=%1 id=%2 hostCnt=%3 length=%4")
+                .arg(mh2.type).arg(mh2.id).arg(mh2.hostCnt).arg(mh2.length);
+        }
 
         // Only handle data frames (type == CMDTYPE_DATA == 100)
         if (mh2.type != static_cast<uint32_t>(CMDTYPE_DATA)) continue;

@@ -1,6 +1,13 @@
 cmake_minimum_required(VERSION 3.16)
 project(VC3DProfileViewer VERSION 2.2 LANGUAGES CXX)
 
+# ── Build timestamp (passed by CI via -DBUILD_TIMESTAMP=...) ─────────────────
+if(NOT DEFINED BUILD_TIMESTAMP)
+    string(TIMESTAMP BUILD_TIMESTAMP "%Y-%m-%d-%H%M" UTC)
+endif()
+message(STATUS "Build timestamp: ${BUILD_TIMESTAMP}")
+add_compile_definitions(BUILD_TIMESTAMP="${BUILD_TIMESTAMP}")
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)

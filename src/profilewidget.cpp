@@ -486,11 +486,40 @@ void ProfileChartView::drawDocOverlay(QPainter &painter)
     int w = overlay.width() - paddingH * 2;
 
     // ─── Title ───────────────────────────────────────────────────────────────
-    painter.setFont(titleFont);
-    painter.setPen(QColor(0, 200, 255));
-    painter.drawText(QRect(x, y, w, titleLineH), Qt::AlignLeft | Qt::AlignVCenter,
-                     "VC 3D Profile Viewer  –  Hilfe & Dokumentation");
-    y += titleLineH + 4;
+    // ── Logo (left) + Title + Version (right) ─────────────────────────────────
+    // Draw logo on the left of the title bar
+    {
+        const int logoW = 90, logoH = 32;
+        QSvgRenderer logoRenderer(QString(":/images/logo_notavis.svg"));
+        if (!logoRenderer.isValid())
+            logoRenderer.load(QCoreApplication::applicationDirPath() + "/resources/logo_notavis.svg");
+        if (logoRenderer.isValid()) {
+            painter.save();
+            painter.setOpacity(0.85);
+            logoRenderer.render(&painter, QRectF(x, y, logoW, logoH));
+            painter.restore();
+        }
+
+        // Title centred
+        painter.setFont(titleFont);
+        painter.setPen(QColor(0, 200, 255));
+        painter.drawText(QRect(x + logoW + 8, y, w - logoW - 8, titleLineH),
+                         Qt::AlignLeft | Qt::AlignVCenter,
+                         "VC 3D Profile Viewer  –  Hilfe");
+
+        // Version bottom-right of title row
+#ifndef BUILD_TIMESTAMP
+#  define BUILD_TIMESTAMP "dev"
+#endif
+        QFont vf = painter.font(); vf.setPointSize(8); vf.setBold(false);
+        painter.setFont(vf);
+        painter.setPen(QColor(120, 120, 150));
+        painter.drawText(QRect(x, y, w, titleLineH),
+                         Qt::AlignRight | Qt::AlignVCenter,
+                         QString("v2.2-%1").arg(BUILD_TIMESTAMP));
+
+        y += qMax(titleLineH, logoH) + 4;
+    }
     painter.setPen(QColor(70, 70, 100));
     painter.drawLine(x, y, x + w, y);
     y += 6;

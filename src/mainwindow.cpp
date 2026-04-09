@@ -461,7 +461,7 @@ MainWindow::~MainWindow()
 {
     if (m_sensorWorker && m_sensorWorker->isRunning()) {
         m_sensorWorker->stopCapture();
-        m_sensorWorker->wait(3000);
+        m_sensorWorker->wait(1500);  // destructor: brief blocking wait is acceptable
     }
 }
 
@@ -861,8 +861,7 @@ void MainWindow::applySourceMode()
         // Stop live sensor if running
         if (m_sensorWorker && m_sensorWorker->isRunning()) {
             m_sensorWorker->stopCapture();
-            m_sensorWorker->wait(3000);
-            updateConnectButtons(false);
+            // Non-blocking: onSensorDisconnected() handles UI update
         }
         statusBar()->showMessage("JSON Wiedergabe – Ordner laden und Play drücken");
     } else {
@@ -913,12 +912,10 @@ void MainWindow::onConnectClicked()
 
 void MainWindow::onDisconnectClicked()
 {
-    if (!m_sensorWorker) return;
+    if (!m_sensorWorker || !m_sensorWorker->isRunning()) return;
+    // Non-blocking: just set stop flag.
+    // onSensorDisconnected() updates the UI once the thread exits.
     m_sensorWorker->stopCapture();
-    m_sensorWorker->wait(3000);
-    m_sensorWorker = nullptr;
-    updateConnectButtons(false);
-    statusBar()->showMessage("Verbindung getrennt");
 }
 
 void MainWindow::onSensorData(const std::vector<ProfilePoint> &points)
@@ -1607,7 +1604,11 @@ void MainWindow::closeEvent(QCloseEvent *event)
     if (m_logger->isOpen()) m_logger->close();
     if (m_sensorWorker && m_sensorWorker->isRunning()) {
         m_sensorWorker->stopCapture();
-        m_sensorWorker->wait(3000);
+        // Process events while waiting so close doesn't freeze
+        for (int i = 0; i < 15 && m_sensorWorker->isRunning(); ++i) {
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 100);
+            m_sensorWorker->wait(100);
+        }
     }
     m_jsonPlayer->stop();
     event->accept();

@@ -523,28 +523,83 @@ void MainWindow::buildUi()
     // Result display
     QGroupBox *resultGroup = new QGroupBox("Messergebnis");
     QVBoxLayout *resultLayout = new QVBoxLayout(resultGroup);
+    resultLayout->setSpacing(4);
+
+    // ── Biegewinkel (sehr groß, aus 1,5m lesbar) ──────────────────────────
+    QLabel *lblAngleCaption = new QLabel("Biegewinkel");
+    lblAngleCaption->setAlignment(Qt::AlignCenter);
+    lblAngleCaption->setStyleSheet("color: #888; font-size: 11px;");
 
     m_lblAngle = new QLabel("—");
     m_lblAngle->setAlignment(Qt::AlignCenter);
-    QFont angleFont = m_lblAngle->font();
-    angleFont.setPointSize(26);
-    angleFont.setBold(true);
-    m_lblAngle->setFont(angleFont);
-    m_lblAngle->setStyleSheet("color: #00e676; background: #1a1a2e; border-radius: 6px; padding: 8px;");
+    m_lblAngle->setMinimumHeight(80);
+    {
+        QFont f = m_lblAngle->font();
+        f.setPointSize(52);
+        f.setBold(true);
+        m_lblAngle->setFont(f);
+    }
+    m_lblAngle->setStyleSheet(
+        "color: #00e676; background: #1a1a2e; border-radius: 8px; padding: 6px;");
 
+    // ── Abweichung Ist − Soll ─────────────────────────────────────────────
+    m_lblAngleDelta = new QLabel("");
+    m_lblAngleDelta->setAlignment(Qt::AlignCenter);
+    {
+        QFont f = m_lblAngleDelta->font();
+        f.setPointSize(18);
+        f.setBold(true);
+        m_lblAngleDelta->setFont(f);
+    }
+    m_lblAngleDelta->setStyleSheet("color: #888;");
+
+    // ── Phi 1 / Phi 2 ────────────────────────────────────────────────────
     m_lblPhi1 = new QLabel("Phi 1: —");
     m_lblPhi2 = new QLabel("Phi 2: —");
     m_lblPhi1->setStyleSheet("color: #00b4ff;");
     m_lblPhi2->setStyleSheet("color: #ff8c00;");
 
-    QLabel *lblAngleCaption = new QLabel("Biegewinkel");
-    lblAngleCaption->setAlignment(Qt::AlignCenter);
-    lblAngleCaption->setStyleSheet("color: #888; font-size: 11px;");
+    // ── Sollwinkel-Einstellung ────────────────────────────────────────────
+    QFrame *targetFrame = new QFrame;
+    targetFrame->setFrameShape(QFrame::StyledPanel);
+    targetFrame->setStyleSheet("background:#1a1a2e; border-radius:5px; padding:2px;");
+    QGridLayout *tgl = new QGridLayout(targetFrame);
+    tgl->setContentsMargins(6,4,6,4);
+    tgl->setSpacing(4);
+
+    QLabel *lblSoll = new QLabel("Sollwinkel:");
+    lblSoll->setStyleSheet("color:#aaa; font-weight:bold;");
+    m_spinTargetAngle = new QDoubleSpinBox;
+    m_spinTargetAngle->setRange(0.0, 180.0);
+    m_spinTargetAngle->setDecimals(2);
+    m_spinTargetAngle->setSuffix(" °");
+    m_spinTargetAngle->setValue(90.0);
+    m_spinTargetAngle->setToolTip("Sollwinkel (Zielwert)");
+    m_spinTargetAngle->setStyleSheet(
+        "background:#222; color:white; border:1px solid #555; border-radius:3px; padding:2px 4px;");
+
+    QLabel *lblTol = new QLabel("Toleranz ±:");
+    lblTol->setStyleSheet("color:#aaa;");
+    m_spinTolerance = new QDoubleSpinBox;
+    m_spinTolerance->setRange(0.01, 10.0);
+    m_spinTolerance->setDecimals(2);
+    m_spinTolerance->setSuffix(" °");
+    m_spinTolerance->setValue(0.5);
+    m_spinTolerance->setToolTip("Toleranzband ± um den Sollwinkel");
+    m_spinTolerance->setStyleSheet(
+        "background:#222; color:white; border:1px solid #555; border-radius:3px; padding:2px 4px;");
+
+    tgl->addWidget(lblSoll,            0, 0);
+    tgl->addWidget(m_spinTargetAngle,  0, 1);
+    tgl->addWidget(lblTol,             1, 0);
+    tgl->addWidget(m_spinTolerance,    1, 1);
 
     resultLayout->addWidget(lblAngleCaption);
     resultLayout->addWidget(m_lblAngle);
+    resultLayout->addWidget(m_lblAngleDelta);
     resultLayout->addWidget(m_lblPhi1);
     resultLayout->addWidget(m_lblPhi2);
+    resultLayout->addWidget(targetFrame);
     leftLayout->addWidget(resultGroup);
 
     // Log group
@@ -1242,16 +1297,42 @@ void MainWindow::updateAngleDisplay(const FitLine &fl1, const FitLine &fl2)
         m_lblPhi2->setText("Phi 2: —");
 
     if (fl1.valid && fl2.valid) {
-        // Bending angle = difference between the two line angles
         double delta = fl2.phi - fl1.phi;
-        // Normalize to [-180, 180]
         while (delta >  180.0) delta -= 360.0;
         while (delta < -180.0) delta += 360.0;
-        m_lblAngle->setText(QString("%1°").arg(std::abs(delta), 0, 'f', 2));
+        const double absBend = std::abs(delta);
+        m_lastBendingAngle = absBend;
+        m_lblAngle->setText(QString("%1°").arg(absBend, 0, 'f', 2));
+        m_lblAngle->setStyleSheet(
+            "color:#00e676; background:#1a1a2e; border-radius:8px; padding:6px;");
+
+        // Abweichung Ist − Soll
+        if (m_spinTargetAngle) {
+            const double target = m_spinTargetAngle->value();
+            const double tol    = m_spinTolerance ? m_spinTolerance->value() : 0.5;
+            const double dev    = absBend - target;
+            const QString sign  = (dev >= 0) ? "+" : "";
+            m_lblAngleDelta->setText(
+                QString("Soll %1°  |  %2%3°")
+                    .arg(target, 0, 'f', 2)
+                    .arg(sign)
+                    .arg(dev, 0, 'f', 2));
+            if (std::abs(dev) <= tol)
+                m_lblAngleDelta->setStyleSheet(
+                    "color:#00e676; font-weight:bold;");  // grün: i.O.
+            else if (std::abs(dev) <= tol * 3.0)
+                m_lblAngleDelta->setStyleSheet(
+                    "color:#ffd600; font-weight:bold;");  // gelb: Grenzwertig
+            else
+                m_lblAngleDelta->setStyleSheet(
+                    "color:#ff5555; font-weight:bold;");  // rot: n.i.O.
+        }
     } else if (fl1.valid) {
         m_lblAngle->setText(QString("%1°").arg(fl1.phi, 0, 'f', 2));
+        m_lblAngleDelta->setText("");
     } else {
         m_lblAngle->setText("—");
+        m_lblAngleDelta->setText("");
     }
 }
 
@@ -1510,6 +1591,8 @@ void MainWindow::saveSettings()
     s.setValue("Playback/Speed", m_speedSlider->value());
     s.setValue("Source/Mode",    static_cast<int>(m_sourceMode));
     s.setValue("Log/Path",       m_editLogPath->text());
+    if (m_spinTargetAngle) s.setValue("Angle/Target",    m_spinTargetAngle->value());
+    if (m_spinTolerance)   s.setValue("Angle/Tolerance", m_spinTolerance->value());
 }
 
 void MainWindow::loadSettings()
@@ -1593,6 +1676,11 @@ void MainWindow::loadSettings()
             ps.sync();
         }
     }
+
+    if (m_spinTargetAngle)
+        m_spinTargetAngle->setValue(s.value("Angle/Target",    90.0).toDouble());
+    if (m_spinTolerance)
+        m_spinTolerance->setValue(  s.value("Angle/Tolerance",  0.5).toDouble());
 
     // Populate preset combo
     refreshPresetCombo();

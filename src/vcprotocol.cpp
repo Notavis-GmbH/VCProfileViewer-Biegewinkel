@@ -296,11 +296,12 @@ bool VcProtocol::readDataFrame(int &out_dataMode, int &out_resultCnt,
         memcpy(&dm,  payload.data() +  4, 4);
         uint64_t ts;
         memcpy(&ts,  payload.data() + 12, 8);
-        uint32_t rc;
-        memcpy(&rc,  payload.data() + 24, 4);
+        uint32_t pointCount, resultCnt;
+        memcpy(&pointCount, payload.data() + 20, 4);  // profile point count
+        memcpy(&resultCnt,  payload.data() + 24, 4);  // extra / result count
 
         out_dataMode  = static_cast<int>(dm);
-        out_resultCnt = static_cast<int>(rc);
+        out_resultCnt = static_cast<int>(pointCount);  // expose pointCount as resultCnt
         out_timestamp = ts;
         out_payload   = std::vector<uint8_t>(payload.begin() + kFrameHdrSize, payload.end());
         return true;

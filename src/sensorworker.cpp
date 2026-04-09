@@ -76,14 +76,17 @@ void SensorWorker::sendInit(VcProtocol &proto, const RoiRect &roi1, const RoiRec
         "EthernetSendNoWait=1\n"
         "EthernetPackNr=1\n"
         "AutoTriggerFPS=50.0\n"
-        "DataMode=8\n"              // product result + profile
+        "DataMode=12\n"             // DataMode=4(profile mm) + DataMode=8(product string)
         "NbrLines=-1\n";            // continuous
 
     proto.sendCommand(CMD_RECEIVE_SENSOR_DATA,
                       sensorParams.toStdString(), 1);
 
     std::string resp;
-    proto.readStringResponse(CMD_RECEIVE_SENSOR_DATA, 1, resp, 1000);
+    bool sensorRespOk = proto.readStringResponse(CMD_RECEIVE_SENSOR_DATA, 1, resp, 2000);
+    qInfo().noquote() << QString("[Sensor] SensorParam response: ok=%1  body=%2")
+        .arg(sensorRespOk ? "true" : "false")
+        .arg(QString::fromStdString(resp).left(120));
 
     // ---- Product parameters ----
     // J00: ROI 1 line detection, J01: ROI 2 line detection
@@ -134,7 +137,10 @@ void SensorWorker::sendInit(VcProtocol &proto, const RoiRect &roi1, const RoiRec
 
     proto.sendCommand(CMD_RECEIVE_PRODUCT_DATA,
                       prodParams.toStdString(), 2);
-    proto.readStringResponse(CMD_RECEIVE_PRODUCT_DATA, 2, resp, 1000);
+    bool prodRespOk = proto.readStringResponse(CMD_RECEIVE_PRODUCT_DATA, 2, resp, 2000);
+    qInfo().noquote() << QString("[Sensor] ProductParam response: ok=%1  body=%2")
+        .arg(prodRespOk ? "true" : "false")
+        .arg(QString::fromStdString(resp).left(120));
 
     emit statusMessage("Sensor initialized, capturing...");
 }
@@ -247,6 +253,9 @@ void SensorWorker::run()
         bool ok = proto.readDataFrame(dataMode, resultCnt, ts, payload, 600);
         if (!ok) continue;
 
+        qDebug().noquote() << QString("[Sensor] Frame: dataMode=%1  resultCnt=%2  bytes=%3")
+            .arg(dataMode).arg(resultCnt).arg(payload.size());
+
         if (dataMode == DATAMODE_PRODUCT) {
             // Product result string (Phi etc.)
             QString text = QString::fromLatin1(
@@ -258,6 +267,7 @@ void SensorWorker::run()
             QStringList lines = text.split('\n', Qt::SkipEmptyParts);
             for (auto &line : lines) {
                 if (line.startsWith("JOB")) {
+                    qDebug().noquote() << "[Sensor] Product:" << line.left(80);
                     AngleResult ar = parseProductString(line);
                     emit angleReady(ar);
                 }
@@ -279,6 +289,7 @@ void SensorWorker::run()
                 if (x > -9999.f && z > -9999.f)
                     pts.push_back({x, z});
             }
+            qDebug().noquote() << QString("[Sensor] Profile: %1 points").arg(pts.size());
             emit profileReady(pts);
 
         } else if (dataMode == DATAMODE_IMAGE) {

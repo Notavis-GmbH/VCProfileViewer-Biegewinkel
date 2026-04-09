@@ -224,11 +224,12 @@ bool VcProtocol::readStringResponse(int paramId, uint32_t hostCmdId,
         memcpy(&mh, payload.data(), sizeof(VcMetaHeader));
 
         // Match: type==0 (string response), id==paramId, hostCnt==hostCmdId
-        if (mh.type == 0 &&
+        if (mh.type == CMDTYPE_STRING &&
             static_cast<int>(mh.id) == paramId &&
             mh.hostCnt == hostCmdId)
         {
-            uint32_t strOffset = sizeof(VcMetaHeader) + 8; // +8: error(4)+dataLen(4)
+            // Payload starts right after the 16-byte VcMetaHeader
+            uint32_t strOffset = static_cast<uint32_t>(sizeof(VcMetaHeader));
             if (gh.dataLength > strOffset)
                 out_response = std::string(
                     reinterpret_cast<char*>(payload.data() + strOffset),
@@ -269,23 +270,30 @@ bool VcProtocol::readDataFrame(int &out_dataMode, int &out_resultCnt,
         std::vector<uint8_t> payload(gh.dataLength);
         if (!recvAll(payload.data(), gh.dataLength, 2000)) continue;
 
-        if (gh.dataLength < 24) continue;
+        // After global header we have VcMetaHeader (16 bytes)
+        if (gh.dataLength < static_cast<uint32_t>(sizeof(VcMetaHeader))) continue;
 
-        // Data frame meta header: type(4) dataMode(4) resultCnt(4) timestamp(8) ...
-        uint32_t cmdType;
-        memcpy(&cmdType, payload.data() + 0, 4);
-        if (cmdType != 100) continue;  // only CMDTYPE_DATA
+        VcMetaHeader mh2;
+        memcpy(&mh2, payload.data(), sizeof(VcMetaHeader));
 
+        // Only handle data frames (type == CMDTYPE_DATA == 100)
+        if (mh2.type != static_cast<uint32_t>(CMDTYPE_DATA)) continue;
+
+        // After VcMetaHeader: dataMode(4) + resultCnt(4) + timestamp(8) + actual payload
+        const uint32_t dataHdrSize = static_cast<uint32_t>(sizeof(VcMetaHeader)) + 16u;
+        if (gh.dataLength < dataHdrSize) continue;
+
+        const uint8_t *dp = payload.data() + sizeof(VcMetaHeader);
         int32_t dm, rc;
         uint64_t ts;
-        memcpy(&dm, payload.data() + 4, 4);
-        memcpy(&rc, payload.data() + 8, 4);
-        memcpy(&ts, payload.data() + 12, 8);
+        memcpy(&dm, dp + 0, 4);
+        memcpy(&rc, dp + 4, 4);
+        memcpy(&ts, dp + 8, 8);
 
         out_dataMode  = dm;
         out_resultCnt = rc;
         out_timestamp = ts;
-        out_payload   = std::vector<uint8_t>(payload.begin() + 24, payload.end());
+        out_payload   = std::vector<uint8_t>(payload.begin() + dataHdrSize, payload.end());
         return true;
     }
     return false;

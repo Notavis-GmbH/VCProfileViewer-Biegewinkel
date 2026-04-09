@@ -586,66 +586,44 @@ void ProfileChartView::drawAngleArc(QPainter &painter)
     double zi = s1 * xi + b1;
     QPoint ip = chartToWidget(xi, zi);
 
-    // Each line has two directions from the intersection.
-    // We pick the direction that goes into the correct CHART quadrant.
+    // Two lines through the intersection create 4 sectors.
+    // Each line has a "rightward" direction (toward larger X in chart) with
+    // screen angle:  atan2(-slope, 1)  (Z inverted: up in chart = up in screen = smaller Y)
+    // and a "leftward" direction (toward smaller X):  atan2(slope, -1)
     //
-    // For a point on line i at chart X = xi + delta:
-    //   if delta > 0 -> going right in chart (larger X)
-    //   Z = si*(xi+delta)+bi = zi + si*delta
-    //   so Z increases if si>0 (line goes up-right), decreases if si<0 (line goes down-right)
+    // The 4 sectors are bounded by these 4 ray directions:
+    //   L1_right, L2_right, L1_left (=L1_right+180), L2_left (=L2_right+180)
     //
-    // Quadrant convention (in chart mm coordinates from intersection):
-    //   TopLeft:     X < xi  AND  Z > zi   -> chart dx<0, dz>0
-    //   TopRight:    X > xi  AND  Z > zi   -> chart dx>0, dz>0
-    //   BottomLeft:  X < xi  AND  Z < zi   -> chart dx<0, dz<0
-    //   BottomRight: X > xi  AND  Z < zi   -> chart dx>0, dz<0
-    //
-    // For line with slope s: going right (dx>0) means dz = s*dx
-    //   -> right direction: chart (dx=+1, dz=s)
-    //   -> left  direction: chart (dx=-1, dz=-s)
-    //
-    // We want the direction where BOTH dx and dz match the quadrant.
-    // For each line pick the direction (right=+1 or left=-1) that best matches.
+    // Sector index (matching AngleQuadrant enum):
+    //   0 TopLeft:     between L1_left  and L2_left   (both lines going left)
+    //   1 TopRight:    between L1_right and L2_left   (L1 right, L2 left)
+    //   2 BottomLeft:  between L1_left  and L2_right  (L1 left,  L2 right)
+    //   3 BottomRight: between L1_right and L2_right  (both lines going right)
 
-    bool wantDxPos, wantDzPos;
+    double ang1r = std::atan2(-s1,  1.0) * 180.0 / M_PI;  // L1 rightward screen angle
+    double ang2r = std::atan2(-s2,  1.0) * 180.0 / M_PI;  // L2 rightward screen angle
+    double ang1l = ang1r + 180.0;  // L1 leftward
+    double ang2l = ang2r + 180.0;  // L2 leftward
+
+    double r1, r2;
     switch (m_angleQuadrant) {
-        case AngleQuadrant::TopLeft:     wantDxPos=false; wantDzPos=true;  break;
-        case AngleQuadrant::TopRight:    wantDxPos=true;  wantDzPos=true;  break;
-        case AngleQuadrant::BottomLeft:  wantDxPos=false; wantDzPos=false; break;
+        case AngleQuadrant::TopLeft:
+            r1 = ang1l;  r2 = ang2l;  break;
+        case AngleQuadrant::TopRight:
+            r1 = ang1r;  r2 = ang2l;  break;
+        case AngleQuadrant::BottomLeft:
+            r1 = ang1l;  r2 = ang2r;  break;
         case AngleQuadrant::BottomRight:
-        default:                         wantDxPos=true;  wantDzPos=false; break;
+        default:
+            r1 = ang1r;  r2 = ang2r;  break;
     }
 
-    // For line i with slope si: rightward direction chart = (1, si), leftward = (-1,-si)
-    // Pick the direction sign (+1 or -1 in X) that matches the quadrant better
-    auto pickSign = [&](double slope) -> double {
-        // rightward: dx=+1, dz=slope  -> score
-        int scoreRight = 0, scoreLeft = 0;
-        if  (wantDxPos)                          scoreRight++; else scoreLeft++;
-        if  (wantDzPos  && slope > 0)            scoreRight++;
-        if  (wantDzPos  && slope < 0)            scoreLeft++;
-        if  (!wantDzPos && slope < 0)            scoreRight++;
-        if  (!wantDzPos && slope > 0)            scoreLeft++;
-        return (scoreRight >= scoreLeft) ? 1.0 : -1.0;
-    };
-
-    double sign1 = pickSign(s1);
-    double sign2 = pickSign(s2);
-
-    // Convert chart directions to screen angles
-    // Chart (dx, dz) -> screen: X maps normally, Z maps inverted (Z up = screen up = smaller Y)
-    double screen_ang1 = std::atan2(-(sign1 * s1), sign1) * 180.0 / M_PI;
-    double screen_ang2 = std::atan2(-(sign2 * s2), sign2) * 180.0 / M_PI;
-
-    double r1 = screen_ang1;
-    double r2 = screen_ang2;
-
-    // Normalise span so arc sweeps <= 180 deg
+    // Normalise so span is in (-180, 180) and sweep is the shorter arc
     while (r2 - r1 >  180.0) r2 -= 360.0;
     while (r2 - r1 < -180.0) r2 += 360.0;
 
-    // Qt drawPie: CCW positive from +X right, 1/16 degree units
-    // Screen Y DOWN: Qt CCW = screen CW = negate angles
+    // Qt drawPie: CCW positive, 1/16 deg from +X screen-right
+    // Screen Y is DOWN so negate to convert from math CCW to Qt CCW
     const int R = 44;
     int qtStart = static_cast<int>(-r1 * 16.0);
     int qtSpan  = static_cast<int>(-(r2 - r1) * 16.0);

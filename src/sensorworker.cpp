@@ -256,14 +256,57 @@ void SensorWorker::run()
         qDebug().noquote() << QString("[Sensor] Frame: dataMode=%1  resultCnt=%2  bytes=%3")
             .arg(dataMode).arg(resultCnt).arg(payload.size());
 
-        if (dataMode == DATAMODE_PRODUCT) {
-            // Product result string (Phi etc.)
+        // DataMode flags (may be combined):
+        //   1 = image, 4 = profile mm, 8 = product string, 9 = profile+product (observed)
+        // We check what the payload looks like rather than relying on exact dataMode value.
+
+        // ── Profile data ─────────────────────────────────────────────────────
+        // Layout after frame header: x[0](f32) z[0](f32) x[1](f32) z[1](f32) ...
+        // pointCount was already decoded into resultCnt by readDataFrame.
+        // payload.size() == resultCnt * 8  (no leading count field – it was in the header)
+        const bool looksLikeProfile = (payload.size() >= 8) &&
+                                      (resultCnt > 0) &&
+                                      (payload.size() == static_cast<size_t>(resultCnt) * 8);
+
+        if (looksLikeProfile || (dataMode & DATAMODE_PROFILE_MM)) {
+            // Use resultCnt as point count; payload = raw float pairs x,z
+            int cnt = (looksLikeProfile && !(dataMode & DATAMODE_PROFILE_MM))
+                      ? resultCnt
+                      : 0;
+
+            // Fallback: try leading int32 count field (old layout)
+            if (!looksLikeProfile && payload.size() >= 4) {
+                int32_t hdrCnt;
+                memcpy(&hdrCnt, payload.data(), 4);
+                if (hdrCnt > 0 && static_cast<size_t>(hdrCnt * 8 + 4) <= payload.size())
+                    cnt = hdrCnt;
+            }
+
+            if (cnt > 0) {
+                std::vector<ProfilePoint> pts;
+                pts.reserve(cnt);
+                const uint8_t *base = looksLikeProfile
+                                      ? payload.data()
+                                      : payload.data() + 4;
+                for (int i = 0; i < cnt; ++i) {
+                    float x, z;
+                    memcpy(&x, base + i * 8,     4);
+                    memcpy(&z, base + i * 8 + 4, 4);
+                    if (x > -9999.f && z > -9999.f)
+                        pts.push_back({static_cast<double>(x),
+                                       static_cast<double>(z)});
+                }
+                qDebug().noquote() << QString("[Sensor] Profile: %1 valid points (cnt=%2)")
+                    .arg(pts.size()).arg(cnt);
+                if (!pts.empty()) emit profileReady(pts);
+            }
+        }
+
+        // ── Product string ───────────────────────────────────────────────────
+        if (dataMode & DATAMODE_PRODUCT) {
             QString text = QString::fromLatin1(
                 reinterpret_cast<const char*>(payload.data()),
                 static_cast<int>(payload.size()));
-
-            // May contain multiple JOB lines
-            // Parse each JOB line
             QStringList lines = text.split('\n', Qt::SkipEmptyParts);
             for (auto &line : lines) {
                 if (line.startsWith("JOB")) {
@@ -272,28 +315,6 @@ void SensorWorker::run()
                     emit angleReady(ar);
                 }
             }
-
-        } else if (dataMode == DATAMODE_PROFILE_MM) {
-            // Profile in mm: [cnt:i32][x0:f32][z0:f32][x1:f32][z1:f32]...
-            if (payload.size() < 4) continue;
-            int32_t cnt;
-            memcpy(&cnt, payload.data(), 4);
-            if (cnt <= 0 || static_cast<size_t>(cnt * 8 + 4) > payload.size()) continue;
-
-            std::vector<ProfilePoint> pts;
-            pts.reserve(cnt);
-            for (int i = 0; i < cnt; ++i) {
-                float x, z;
-                memcpy(&x, payload.data() + 4 + i * 8,     4);
-                memcpy(&z, payload.data() + 4 + i * 8 + 4, 4);
-                if (x > -9999.f && z > -9999.f)
-                    pts.push_back({x, z});
-            }
-            qDebug().noquote() << QString("[Sensor] Profile: %1 points").arg(pts.size());
-            emit profileReady(pts);
-
-        } else if (dataMode == DATAMODE_IMAGE) {
-            // Grey image – ignore for now
         }
     }
 

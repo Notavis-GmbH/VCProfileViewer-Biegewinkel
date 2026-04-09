@@ -273,51 +273,36 @@ bool VcProtocol::readDataFrame(int &out_dataMode, int &out_resultCnt,
         if (!recvAll(payload.data(), gh.dataLength, 2000)) continue;
 
         // After global header we have VcMetaHeader (16 bytes)
-        if (gh.dataLength < static_cast<uint32_t>(sizeof(VcMetaHeader))) continue;
+        // Frame layout (confirmed by hex dump analysis):
+        // [0]  type(4)       = 100 (CMDTYPE_DATA)
+        // [4]  dataMode(4)   = sensor DataMode (9 = profile+product, 4 = profile only, etc.)
+        // [8]  counter(4)    = frame counter
+        // [12] timestamp(8)  = microsecond timestamp (lo+hi)
+        // [20] pointCount(4) = number of profile points
+        // [24] resultCnt(4)  = result count / extra
+        // [28] float pairs   = x[0],z[0], x[1],z[1], ...  (in mm)
+        //
+        // NOTE: There is NO separate VcMetaHeader before this – the GH payload
+        //       starts directly with type=100.
 
-        // --- Hex dump first 64 bytes for layout diagnosis (first 3 frames only) ---
-        static int dumpCount = 0;
-        if (dumpCount < 3) {
-            ++dumpCount;
-            QString hex;
-            int dumpLen = qMin((int)gh.dataLength, 64);
-            for (int di = 0; di < dumpLen; ++di)
-                hex += QString("%1 ").arg(payload[di], 2, 16, QChar('0'));
-            qDebug().noquote() << QString("[Proto] Frame#%1 ghLen=%2 dump: %3")
-                .arg(dumpCount).arg(gh.dataLength).arg(hex);
-            // Also log GH fields
-            qDebug().noquote() << QString("[Proto] GH: sync=%1 counter=%2 error=%3 dataLen=%4")
-                .arg(gh.syncByte, 8, 16, QChar('0'))
-                .arg(gh.counter).arg(gh.error).arg(gh.dataLength);
-        }
+        const uint32_t kFrameHdrSize = 28u;
+        if (gh.dataLength < kFrameHdrSize) continue;
 
-        VcMetaHeader mh2;
-        memcpy(&mh2, payload.data(), sizeof(VcMetaHeader));
+        uint32_t cmdType;
+        memcpy(&cmdType, payload.data() + 0, 4);
+        if (cmdType != static_cast<uint32_t>(CMDTYPE_DATA)) continue;
 
-        // Log meta header fields
-        if (dumpCount <= 3) {
-            qDebug().noquote() << QString("[Proto] MH: type=%1 id=%2 hostCnt=%3 length=%4")
-                .arg(mh2.type).arg(mh2.id).arg(mh2.hostCnt).arg(mh2.length);
-        }
-
-        // Only handle data frames (type == CMDTYPE_DATA == 100)
-        if (mh2.type != static_cast<uint32_t>(CMDTYPE_DATA)) continue;
-
-        // After VcMetaHeader: dataMode(4) + resultCnt(4) + timestamp(8) + actual payload
-        const uint32_t dataHdrSize = static_cast<uint32_t>(sizeof(VcMetaHeader)) + 16u;
-        if (gh.dataLength < dataHdrSize) continue;
-
-        const uint8_t *dp = payload.data() + sizeof(VcMetaHeader);
-        int32_t dm, rc;
+        uint32_t dm;
+        memcpy(&dm,  payload.data() +  4, 4);
         uint64_t ts;
-        memcpy(&dm, dp + 0, 4);
-        memcpy(&rc, dp + 4, 4);
-        memcpy(&ts, dp + 8, 8);
+        memcpy(&ts,  payload.data() + 12, 8);
+        uint32_t rc;
+        memcpy(&rc,  payload.data() + 24, 4);
 
-        out_dataMode  = dm;
-        out_resultCnt = rc;
+        out_dataMode  = static_cast<int>(dm);
+        out_resultCnt = static_cast<int>(rc);
         out_timestamp = ts;
-        out_payload   = std::vector<uint8_t>(payload.begin() + dataHdrSize, payload.end());
+        out_payload   = std::vector<uint8_t>(payload.begin() + kFrameHdrSize, payload.end());
         return true;
     }
     return false;

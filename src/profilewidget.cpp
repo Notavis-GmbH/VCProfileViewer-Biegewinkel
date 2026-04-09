@@ -608,8 +608,8 @@ void ProfileChartView::drawAngleArc(QPainter &painter)
     // Normalise both to [0, 360)
     while (ang1r < 0) ang1r += 360.0;
     while (ang2r < 0) ang2r += 360.0;
-    double ang1l = ang1r + 180.0;
-    double ang2l = ang2r + 180.0;
+    double ang1l = ang1r + 180.0;  if (ang1l >= 360.0) ang1l -= 360.0;
+    double ang2l = ang2r + 180.0;  if (ang2l >= 360.0) ang2l -= 360.0;
     // All four sector boundaries, normalised to [0,360)
     // Sectors go CCW in Qt convention; we always sweep the SHORT arc (<180 deg)
     // between the two bounding rays of the chosen quadrant.
@@ -638,8 +638,10 @@ void ProfileChartView::drawAngleArc(QPainter &painter)
         double a = rays[k];
         double b = (k == 3) ? rays[0] + 360.0 : rays[k+1];
         double span = b - a;
+        if (span <= 0) span += 360.0;  // should not happen after sort, but guard
         double mid  = a + span * 0.5;
         while (mid >= 360.0) mid -= 360.0;
+        while (mid <    0.0) mid += 360.0;
 
         // Determine which half of L1 and L2 the mid-angle falls in
         auto angDiff = [](double a, double b) -> double {
@@ -657,6 +659,8 @@ void ProfileChartView::drawAngleArc(QPainter &painter)
 
         if (sectorQ == m_angleQuadrant) {
             startAngle = a;
+            while (startAngle >= 360.0) startAngle -= 360.0;
+            while (startAngle <    0.0) startAngle += 360.0;
             spanAngle  = span;
             break;
         }

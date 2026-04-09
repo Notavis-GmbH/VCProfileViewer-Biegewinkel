@@ -932,13 +932,13 @@ void ProfileWidget::updateFitLines(
 
 void ProfileWidget::setFitLabels(const QString &m1Label, const QString &m2Label,
                                   double bendingAngleDeg)
+{
+    m_chartView->setFitLabels(m1Label, m2Label, bendingAngleDeg);
+}
 
 void ProfileWidget::setAngleQuadrant(AngleQuadrant q)
 {
     m_chartView->setAngleQuadrant(q);
-}
-{
-    m_chartView->setFitLabels(m1Label, m2Label, bendingAngleDeg);
 }
 
 void ProfileWidget::onToggleDocOverlay()

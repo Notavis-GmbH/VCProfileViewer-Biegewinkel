@@ -414,52 +414,7 @@ void ProfileChartView::drawInfoPanel(QPainter &painter)
         painter.drawText(QRect(px, py, tw, th), Qt::AlignCenter, angleText);
     }
 
-    // ── Small ROI subtitles ────────────────────────────────────────────────
-    QFont smallFont = painter.font();
-    smallFont.setPointSize(8);
-    smallFont.setBold(false);
-    QFontMetrics smallFm(smallFont);
-
-    QStringList subLines;
-    if (m_hmLine1.valid && !m_methodLabel1.isEmpty())
-        subLines << QString("█ ROI 1 [%1] φ=%2°  RMS=%3μm")
-                    .arg(m_methodLabel1)
-                    .arg(m_hmLine1.phi, 0, 'f', 2)
-                    .arg(m_hmLine1.rmsResidual * 1000.0, 0, 'f', 1);
-    if (m_hmLine2.valid && !m_methodLabel2.isEmpty())
-        subLines << QString("█ ROI 2 [%1] φ=%2°  RMS=%3μm")
-                    .arg(m_methodLabel2)
-                    .arg(m_hmLine2.phi, 0, 'f', 2)
-                    .arg(m_hmLine2.rmsResidual * 1000.0, 0, 'f', 1);
-
-    if (!subLines.isEmpty()) {
-        QFont bigFont2 = painter.font(); bigFont2.setPointSize(32); bigFont2.setBold(true);
-        QFontMetrics bigFm2(bigFont2);
-        int bigH = bigFm2.height() + 16 + 4;
-
-        int maxW = 0;
-        for (auto &l : subLines) maxW = std::max(maxW, smallFm.horizontalAdvance(l));
-        int lineH  = smallFm.height() + 3;
-        int totalH = subLines.size() * lineH + 8;
-        int totalW = maxW + 16;
-        int px2 = static_cast<int>(pa.right()) - totalW - 8;
-        int py2 = static_cast<int>(pa.top())  + 8 + bigH;
-
-        painter.setPen(Qt::NoPen);
-        painter.setBrush(QColor(10, 10, 20, 200));
-        painter.drawRoundedRect(QRect(px2, py2, totalW, totalH), 5, 5);
-        painter.setBrush(Qt::NoBrush);
-        painter.setPen(QPen(QColor(60,60,80),1));
-        painter.drawRoundedRect(QRect(px2, py2, totalW, totalH), 5, 5);
-
-        painter.setFont(smallFont);
-        int y = py2 + 4;
-        for (int i = 0; i < subLines.size(); ++i) {
-            painter.setPen(i == 0 ? QColor(80,180,255) : QColor(255,160,40));
-            painter.drawText(px2 + 8, y + smallFm.ascent(), subLines[i]);
-            y += lineH;
-        }
-    }
+    // ROI subtitle panel removed per user request
 }
 
 
@@ -611,55 +566,86 @@ void ProfileChartView::drawAngleArc(QPainter &painter)
     double s2 = m_hmLine2.slope, b2 = m_hmLine2.intercept;
     if (std::abs(s2 - s1) < 1e-9) return;
 
+    // Intersection in chart coordinates
     double xi = (b2 - b1) / (s1 - s2);
     double zi = s1 * xi + b1;
     QPoint ip = chartToWidget(xi, zi);
 
-    QPoint p1a = chartToWidget(m_hmLine1.xMin, s1 * m_hmLine1.xMin + b1);
-    QPoint p1b = chartToWidget(m_hmLine1.xMax, s1 * m_hmLine1.xMax + b1);
-    QPoint p2a = chartToWidget(m_hmLine2.xMin, s2 * m_hmLine2.xMin + b2);
-    QPoint p2b = chartToWidget(m_hmLine2.xMax, s2 * m_hmLine2.xMax + b2);
+    // Screen-space direction vectors for each line (pointing right = +X screen)
+    QPoint p1a = chartToWidget(m_hmLine1.xMin, s1*m_hmLine1.xMin+b1);
+    QPoint p1b = chartToWidget(m_hmLine1.xMax, s1*m_hmLine1.xMax+b1);
+    QPoint p2a = chartToWidget(m_hmLine2.xMin, s2*m_hmLine2.xMin+b2);
+    QPoint p2b = chartToWidget(m_hmLine2.xMax, s2*m_hmLine2.xMax+b2);
 
-    double ang1 = std::atan2(p1b.y() - p1a.y(), p1b.x() - p1a.x()) * 180.0 / M_PI;
-    double ang2 = std::atan2(p2b.y() - p2a.y(), p2b.x() - p2a.x()) * 180.0 / M_PI;
+    // Direction angles in screen degrees (screen Y inverted vs math)
+    // ang = angle of the "rightward" direction of each line
+    double ang1r = std::atan2(p1b.y()-p1a.y(), p1b.x()-p1a.x()) * 180.0/M_PI;
+    double ang2r = std::atan2(p2b.y()-p2a.y(), p2b.x()-p2a.x()) * 180.0/M_PI;
 
-    double startDeg, spanDeg;
+    // Each line has two ray directions from the intersection.
+    // We select two rays that bound the requested quadrant:
+    //   TopLeft    -> ray going LEFT  from line1 + ray going LEFT  from line2
+    //   TopRight   -> ray going RIGHT from line1 + ray going LEFT  from line2
+    //   BottomLeft -> ray going LEFT  from line1 + ray going RIGHT from line2
+    //   BottomRight-> ray going RIGHT from line1 + ray going RIGHT from line2
+    //
+    // "LEFT" = ang+180, "RIGHT" = ang (rightward = toward larger X in screen)
+    // We determine which direction of each line goes into the requested quadrant
+    // by checking if the intersection is to the left or right of centre.
+
+    double r1, r2;  // the two bounding ray angles (screen degrees)
     switch (m_angleQuadrant) {
         case AngleQuadrant::TopLeft:
-            startDeg = ang1 + 180.0; spanDeg = ang2 + 180.0 - startDeg; break;
+            r1 = ang1r + 180.0;  r2 = ang2r + 180.0;  break;
         case AngleQuadrant::TopRight:
-            startDeg = ang2; spanDeg = ang1 - ang2; break;
+            r1 = ang1r;          r2 = ang2r + 180.0;  break;
         case AngleQuadrant::BottomLeft:
-            startDeg = ang1; spanDeg = ang2 - ang1; break;
+            r1 = ang1r + 180.0;  r2 = ang2r;          break;
         case AngleQuadrant::BottomRight:
         default:
-            startDeg = ang2 + 180.0; spanDeg = (ang1 + 180.0) - (ang2 + 180.0); break;
+            r1 = ang1r;          r2 = ang2r;          break;
     }
-    while (spanDeg >  180.0) spanDeg -= 360.0;
-    while (spanDeg < -180.0) spanDeg += 360.0;
 
+    // Normalise r2 relative to r1 so span is in (-360,360)
+    while (r2 - r1 >  180.0) r2 -= 360.0;
+    while (r2 - r1 < -180.0) r2 += 360.0;
+
+    double startDeg = r1;
+    double spanDeg  = r2 - r1;
+
+    // Qt drawPie: angles in 1/16 degree, CCW from +X screen-right
+    // Screen Y inverted -> Qt is already in screen space (CW = negative span)
+    // Invert Y because Qt measures CCW but screen Y points down
     const int R = 44;
-    int qtStart = static_cast<int>(-startDeg * 16);
-    int qtSpan  = static_cast<int>(-spanDeg  * 16);
+    int qtStart = static_cast<int>(-startDeg * 16.0);
+    int qtSpan  = static_cast<int>(-spanDeg  * 16.0);
 
     painter.setPen(QPen(QColor(255, 220, 0), 2));
     painter.setBrush(QBrush(QColor(255, 220, 0, 50)));
     painter.drawPie(QRect(ip.x()-R, ip.y()-R, 2*R, 2*R), qtStart, qtSpan);
 
-    static const char* kNames[] = { "Oben-Links","Oben-Rechts","Unten-Links","Unten-Rechts" };
+    // Label
+    static const char* kNames[] = {"Oben-Links","Oben-Rechts","Unten-Links","Unten-Rechts"};
     const int qi = static_cast<int>(m_angleQuadrant);
     QString label = kNames[qi];
     QFont lf = painter.font(); lf.setPointSize(9); lf.setBold(true);
     painter.setFont(lf);
     QFontMetrics lfm(lf);
     int lw = lfm.horizontalAdvance(label) + 10, lh = lfm.height() + 4;
-    int lx = ip.x() + R + 8, ly = ip.y() - lh / 2;
+    // Place label left or right depending on quadrant
+    int lx = (m_angleQuadrant == AngleQuadrant::TopLeft ||
+              m_angleQuadrant == AngleQuadrant::BottomLeft)
+             ? ip.x() - R - lw - 4
+             : ip.x() + R + 8;
+    int ly = ip.y() - lh / 2;
     painter.setPen(Qt::NoPen);
     painter.setBrush(QColor(10, 10, 20, 180));
-    painter.drawRoundedRect(QRect(lx-2, ly, lw, lh), 3, 3);
+    painter.drawRoundedRect(QRect(lx, ly, lw, lh), 3, 3);
     painter.setPen(QColor(255, 220, 0));
     painter.setBrush(Qt::NoBrush);
-    painter.drawText(lx+2, ly+lfm.ascent()+2, label);
+    painter.drawText(lx + 4, ly + lfm.ascent() + 2, label);
+
+    // Dot at intersection
     painter.setPen(Qt::NoPen);
     painter.setBrush(QColor(255, 220, 0, 200));
     painter.drawEllipse(ip, 4, 4);

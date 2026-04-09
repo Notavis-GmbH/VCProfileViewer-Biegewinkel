@@ -527,7 +527,7 @@ void MainWindow::buildUi()
     m_lblAngle = new QLabel("—");
     m_lblAngle->setAlignment(Qt::AlignCenter);
     QFont angleFont = m_lblAngle->font();
-    angleFont.setPointSize(22);
+    angleFont.setPointSize(28);
     angleFont.setBold(true);
     m_lblAngle->setFont(angleFont);
     m_lblAngle->setStyleSheet("color: #00e676; background: #1a1a2e; border-radius: 6px; padding: 6px;");

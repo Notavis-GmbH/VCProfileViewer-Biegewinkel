@@ -4,6 +4,16 @@
 // so this file is safe to include from Qt widget headers
 
 // Line-fitting algorithm selection (per ROI)
+// Which of the 4 angles at the intersection of the two fit lines to display:
+//   TopLeft=0  TopRight=1  BottomLeft=2  BottomRight=3
+//   (relative to the intersection point, in chart coordinates)
+enum class AngleQuadrant {
+    TopLeft     = 0,   // Winkel oben-links    (Innenwinkel bei aufgebogenem Teil)
+    TopRight    = 1,   // Winkel oben-rechts
+    BottomLeft  = 2,   // Winkel unten-links
+    BottomRight = 3,   // Winkel unten-rechts  (Aussenwinkel bei aufgebogenem Teil)
+};
+
 enum class FitMethod {
     OLS    = 0,  // Ordinary Least Squares  – fast, optimal for clean data
     RANSAC = 1,  // Random Sample Consensus – robust against outliers / gaps

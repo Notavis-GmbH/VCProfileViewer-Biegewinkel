@@ -49,6 +49,10 @@ public:
     // Toggle documentation overlay on/off
     void setDocOverlayVisible(bool v);
 
+    // Which quadrant angle to display at the intersection
+    void setAngleQuadrant(AngleQuadrant q);
+    AngleQuadrant angleQuadrant() const { return m_angleQuadrant; }
+
 signals:
     void roiChanged(int roiId, RoiRect r);
     void resetZoomRequested();
@@ -95,7 +99,13 @@ private:
     bool     m_hasBendingAngle = false;
 
     // Documentation overlay
-    bool     m_docOverlayVisible = false;
+    bool          m_docOverlayVisible = false;
+
+    // Which quadrant to measure
+    AngleQuadrant m_angleQuadrant     = AngleQuadrant::TopLeft;
+
+    // Helper: draw angle arc at intersection
+    void    drawAngleArc(QPainter &painter);
 };
 
 // -----------------------------------------------------------------------
@@ -115,6 +125,7 @@ public:
     // Pass method labels + bending angle for overlay display
     void setFitLabels(const QString &m1Label, const QString &m2Label,
                       double bendingAngleDeg);
+    void setAngleQuadrant(AngleQuadrant q);
     void clearProfile();
 
     void setRoi(int roiId, const RoiRect &r);

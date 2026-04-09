@@ -527,25 +527,57 @@ void MainWindow::buildUi()
     m_lblAngle = new QLabel("—");
     m_lblAngle->setAlignment(Qt::AlignCenter);
     QFont angleFont = m_lblAngle->font();
-    angleFont.setPointSize(26);
+    angleFont.setPointSize(22);
     angleFont.setBold(true);
     m_lblAngle->setFont(angleFont);
-    m_lblAngle->setStyleSheet("color: #00e676; background: #1a1a2e; border-radius: 6px; padding: 8px;");
-
-    m_lblPhi1 = new QLabel("Phi 1: —");
-    m_lblPhi2 = new QLabel("Phi 2: —");
-    m_lblPhi1->setStyleSheet("color: #00b4ff;");
-    m_lblPhi2->setStyleSheet("color: #ff8c00;");
+    m_lblAngle->setStyleSheet("color: #00e676; background: #1a1a2e; border-radius: 6px; padding: 6px;");
 
     QLabel *lblAngleCaption = new QLabel("Biegewinkel");
     lblAngleCaption->setAlignment(Qt::AlignCenter);
     lblAngleCaption->setStyleSheet("color: #888; font-size: 11px;");
 
+    // ── Quadrant-Auswahl ──────────────────────────────────────────────
+    QLabel *lblQuadCaption = new QLabel("Winkel-Quadrant (Messrichtung)");
+    lblQuadCaption->setAlignment(Qt::AlignCenter);
+    lblQuadCaption->setStyleSheet("color: #888; font-size: 10px;");
+
+    auto makeQuadBtn = [](const QString &label, const QString &tip) {
+        QPushButton *btn = new QPushButton(label);
+        btn->setToolTip(tip);
+        btn->setCheckable(true);
+        btn->setMinimumHeight(32);
+        btn->setStyleSheet(
+            "QPushButton { background:#2a2a3a; color:#ccc; border:1px solid #444; "
+            "              border-radius:4px; font-size:16px; }"
+            "QPushButton:checked { background:#1a3c5c; color:white; border:1px solid #4af; }"
+            "QPushButton:hover   { background:#3a3a4a; }");
+        return btn;
+    };
+
+    m_btnQuadTL = makeQuadBtn("◤", "Oben-Links (Innenwinkel oben)");
+    m_btnQuadTR = makeQuadBtn("◥", "Oben-Rechts");
+    m_btnQuadBL = makeQuadBtn("◣", "Unten-Links");
+    m_btnQuadBR = makeQuadBtn("◢", "Unten-Rechts (Aussenwinkel unten)");
+    m_btnQuadTL->setChecked(true);  // default
+
+    QGridLayout *quadGrid = new QGridLayout;
+    quadGrid->setSpacing(4);
+    quadGrid->addWidget(m_btnQuadTL, 0, 0);
+    quadGrid->addWidget(m_btnQuadTR, 0, 1);
+    quadGrid->addWidget(m_btnQuadBL, 1, 0);
+    quadGrid->addWidget(m_btnQuadBR, 1, 1);
+
     resultLayout->addWidget(lblAngleCaption);
     resultLayout->addWidget(m_lblAngle);
-    resultLayout->addWidget(m_lblPhi1);
-    resultLayout->addWidget(m_lblPhi2);
+    resultLayout->addWidget(lblQuadCaption);
+    resultLayout->addLayout(quadGrid);
     leftLayout->addWidget(resultGroup);
+
+    // Connect quadrant buttons
+    connect(m_btnQuadTL, &QPushButton::clicked, this, [this]{ onQuadrantSelected(AngleQuadrant::TopLeft);     });
+    connect(m_btnQuadTR, &QPushButton::clicked, this, [this]{ onQuadrantSelected(AngleQuadrant::TopRight);    });
+    connect(m_btnQuadBL, &QPushButton::clicked, this, [this]{ onQuadrantSelected(AngleQuadrant::BottomLeft);  });
+    connect(m_btnQuadBR, &QPushButton::clicked, this, [this]{ onQuadrantSelected(AngleQuadrant::BottomRight); });
 
     // Log group
     buildLogGroup(leftPanel, leftLayout);
@@ -1231,22 +1263,18 @@ void MainWindow::computeAndDisplayFitLines(const std::vector<ProfilePoint> &pts)
 
 void MainWindow::updateAngleDisplay(const FitLine &fl1, const FitLine &fl2)
 {
-    if (fl1.valid)
-        m_lblPhi1->setText(QString("Phi 1: %1°").arg(fl1.phi, 0, 'f', 2));
-    else
-        m_lblPhi1->setText("Phi 1: —");
-
-    if (fl2.valid)
-        m_lblPhi2->setText(QString("Phi 2: %1°").arg(fl2.phi, 0, 'f', 2));
-    else
-        m_lblPhi2->setText("Phi 2: —");
-
     if (fl1.valid && fl2.valid) {
         double delta = fl2.phi - fl1.phi;
         while (delta >  180.0) delta -= 360.0;
         while (delta < -180.0) delta += 360.0;
-        m_lblAngle->setText(QString("%1°").arg(std::abs(delta), 0, 'f', 2));
-        m_lblAngle->setStyleSheet("color: #00e676; background: #1a1a2e; border-radius: 6px; padding: 8px;");
+        // Apply quadrant: TopLeft/BottomRight give the supplementary angle
+        double displayAngle = std::abs(delta);
+        if (m_angleQuadrant == AngleQuadrant::TopRight ||
+            m_angleQuadrant == AngleQuadrant::BottomLeft) {
+            displayAngle = 180.0 - displayAngle;
+        }
+        m_lblAngle->setText(QString("%1°").arg(displayAngle, 0, 'f', 2));
+        m_lblAngle->setStyleSheet("color: #00e676; background: #1a1a2e; border-radius: 6px; padding: 6px;");
     } else if (fl1.valid) {
         m_lblAngle->setText(QString("%1°").arg(fl1.phi, 0, 'f', 2));
     } else {
@@ -1595,6 +1623,20 @@ void MainWindow::loadSettings()
 
     // Populate preset combo
     refreshPresetCombo();
+}
+
+void MainWindow::onQuadrantSelected(AngleQuadrant q)
+{
+    m_angleQuadrant = q;
+    // Update button checked states (exclusive)
+    m_btnQuadTL->setChecked(q == AngleQuadrant::TopLeft);
+    m_btnQuadTR->setChecked(q == AngleQuadrant::TopRight);
+    m_btnQuadBL->setChecked(q == AngleQuadrant::BottomLeft);
+    m_btnQuadBR->setChecked(q == AngleQuadrant::BottomRight);
+    // Update chart arc
+    m_profileWidget->setAngleQuadrant(q);
+    // Recompute displayed angle immediately
+    computeAndDisplayFitLines();
 }
 
 void MainWindow::closeEvent(QCloseEvent *event)

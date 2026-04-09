@@ -293,6 +293,12 @@ void ProfileChartView::setDocOverlayVisible(bool v)
     viewport()->update();
 }
 
+void ProfileChartView::setAngleQuadrant(AngleQuadrant q)
+{
+    m_angleQuadrant = q;
+    viewport()->update();
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 //  Helper: draw a semi-transparent rounded-rect background for text
 // ─────────────────────────────────────────────────────────────────────────────
@@ -376,82 +382,86 @@ void ProfileChartView::drawFitLineLabels(QPainter &painter)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  drawInfoPanel – compact summary box (top-right corner of the chart)
-//  Shows: ROI1 method+phi, ROI2 method+phi, Biegewinkel
+// ─────────────────────────────────────────────────────────────────────────────
+//  drawInfoPanel – large bending angle (top-right) + small ROI subtitles
 // ─────────────────────────────────────────────────────────────────────────────
 void ProfileChartView::drawInfoPanel(QPainter &painter)
 {
-    if (!m_hmLine1.valid && !m_hmLine2.valid) return;
+    if (!m_hasBendingAngle && !m_hmLine1.valid && !m_hmLine2.valid) return;
 
-    QFont font = painter.font();
-    font.setPointSize(9);
-    font.setBold(false);
-    painter.setFont(font);
-    QFontMetrics fm(font);
-
-    // Build lines
-    QStringList lines;
-    if (m_hmLine1.valid && !m_methodLabel1.isEmpty()) {
-        lines << QString("█ ROI 1  [%1]  φ=%2°  RMS=%3μm")
-                         .arg(m_methodLabel1)
-                         .arg(m_hmLine1.phi,               0, 'f', 2)
-                         .arg(m_hmLine1.rmsResidual*1000.0, 0, 'f', 1);
-    }
-    if (m_hmLine2.valid && !m_methodLabel2.isEmpty()) {
-        lines << QString("█ ROI 2  [%1]  φ=%2°  RMS=%3μm")
-                         .arg(m_methodLabel2)
-                         .arg(m_hmLine2.phi,               0, 'f', 2)
-                         .arg(m_hmLine2.rmsResidual*1000.0, 0, 'f', 1);
-    }
-    if (m_hasBendingAngle) {
-        lines << QString("▲ Biegewinkel = %1°")
-                         .arg(std::abs(m_bendingAngle), 0, 'f', 2);
-    }
-    if (lines.isEmpty()) return;
-
-    // Measure
-    int maxW = 0;
-    for (auto &l : lines) maxW = std::max(maxW, fm.horizontalAdvance(l));
-    int lineH  = fm.height() + 3;
-    int totalH = lines.size() * lineH + 10;
-    int totalW = maxW + 16;
-
-    // Place top-right, offset from plotArea right edge
     QRectF pa = chart()->plotArea();
-    int px = static_cast<int>(pa.right()) - totalW - 8;
-    int py = static_cast<int>(pa.top()) + 8;
 
-    QRect panelRect(px, py, totalW, totalH);
+    // ── Large bending angle ────────────────────────────────────────────────
+    if (m_hasBendingAngle) {
+        QFont bigFont = painter.font();
+        bigFont.setPointSize(32);
+        bigFont.setBold(true);
+        QFontMetrics bigFm(bigFont);
+        const QString angleText = QString("%1°").arg(std::abs(m_bendingAngle), 0, 'f', 2);
+        int tw = bigFm.horizontalAdvance(angleText) + 24;
+        int th = bigFm.height() + 16;
+        int px = static_cast<int>(pa.right()) - tw - 8;
+        int py = static_cast<int>(pa.top())  +  8;
 
-    // Panel background
-    painter.setPen(Qt::NoPen);
-    painter.setBrush(QColor(15, 15, 25, 215));
-    painter.drawRoundedRect(panelRect, 6, 6);
-    painter.setPen(QPen(QColor(80, 80, 100), 1));
-    painter.drawRoundedRect(panelRect, 6, 6);
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QColor(10, 10, 20, 220));
+        painter.drawRoundedRect(QRect(px, py, tw, th), 8, 8);
+        painter.setPen(QPen(QColor(0, 230, 118), 1.5));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawRoundedRect(QRect(px, py, tw, th), 8, 8);
+        painter.setFont(bigFont);
+        painter.setPen(QColor(0, 230, 118));
+        painter.drawText(QRect(px, py, tw, th), Qt::AlignCenter, angleText);
+    }
 
-    // Text
-    int y = py + 7;
-    for (int i = 0; i < lines.size(); ++i) {
-        // Leading █ colored per ROI / angle
-        QColor col;
-        if      (i == 0 && m_hmLine1.valid) col = QColor(0, 180, 255);
-        else if (i == 1 && m_hmLine2.valid) col = QColor(255, 140, 0);
-        else                                col = QColor(0, 230, 118);   // green for angle
+    // ── Small ROI subtitles ────────────────────────────────────────────────
+    QFont smallFont = painter.font();
+    smallFont.setPointSize(8);
+    smallFont.setBold(false);
+    QFontMetrics smallFm(smallFont);
 
-        // Draw the colored block
-        painter.setPen(col);
-        QString leading = lines[i].left(1);  // "█" or "▲"
-        painter.drawText(QRect(px + 6, y, totalW - 10, lineH), Qt::AlignLeft | Qt::AlignVCenter, leading);
+    QStringList subLines;
+    if (m_hmLine1.valid && !m_methodLabel1.isEmpty())
+        subLines << QString("█ ROI 1 [%1] φ=%2°  RMS=%3μm")
+                    .arg(m_methodLabel1)
+                    .arg(m_hmLine1.phi, 0, 'f', 2)
+                    .arg(m_hmLine1.rmsResidual * 1000.0, 0, 'f', 1);
+    if (m_hmLine2.valid && !m_methodLabel2.isEmpty())
+        subLines << QString("█ ROI 2 [%1] φ=%2°  RMS=%3μm")
+                    .arg(m_methodLabel2)
+                    .arg(m_hmLine2.phi, 0, 'f', 2)
+                    .arg(m_hmLine2.rmsResidual * 1000.0, 0, 'f', 1);
 
-        // Remaining text in white
-        painter.setPen(QColor(220, 220, 220));
-        painter.drawText(QRect(px + 6 + fm.horizontalAdvance(leading), y,
-                               totalW - 12 - fm.horizontalAdvance(leading), lineH),
-                         Qt::AlignLeft | Qt::AlignVCenter, lines[i].mid(1));
-        y += lineH;
+    if (!subLines.isEmpty()) {
+        QFont bigFont2 = painter.font(); bigFont2.setPointSize(32); bigFont2.setBold(true);
+        QFontMetrics bigFm2(bigFont2);
+        int bigH = bigFm2.height() + 16 + 4;
+
+        int maxW = 0;
+        for (auto &l : subLines) maxW = std::max(maxW, smallFm.horizontalAdvance(l));
+        int lineH  = smallFm.height() + 3;
+        int totalH = subLines.size() * lineH + 8;
+        int totalW = maxW + 16;
+        int px2 = static_cast<int>(pa.right()) - totalW - 8;
+        int py2 = static_cast<int>(pa.top())  + 8 + bigH;
+
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QColor(10, 10, 20, 200));
+        painter.drawRoundedRect(QRect(px2, py2, totalW, totalH), 5, 5);
+        painter.setBrush(Qt::NoBrush);
+        painter.setPen(QPen(QColor(60,60,80),1));
+        painter.drawRoundedRect(QRect(px2, py2, totalW, totalH), 5, 5);
+
+        painter.setFont(smallFont);
+        int y = py2 + 4;
+        for (int i = 0; i < subLines.size(); ++i) {
+            painter.setPen(i == 0 ? QColor(80,180,255) : QColor(255,160,40));
+            painter.drawText(px2 + 8, y + smallFm.ascent(), subLines[i]);
+            y += lineH;
+        }
     }
 }
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  drawDocOverlay – full documentation panel (toggle via ? button)
@@ -590,6 +600,71 @@ void ProfileChartView::drawDocOverlay(QPainter &painter)
                      Qt::AlignRight | Qt::AlignVCenter, "[ ? ] zum Schließen");
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  drawAngleArc – arc at the intersection of the two fit lines
+// ─────────────────────────────────────────────────────────────────────────────
+void ProfileChartView::drawAngleArc(QPainter &painter)
+{
+    if (!m_hmLine1.valid || !m_hmLine2.valid) return;
+
+    double s1 = m_hmLine1.slope, b1 = m_hmLine1.intercept;
+    double s2 = m_hmLine2.slope, b2 = m_hmLine2.intercept;
+    if (std::abs(s2 - s1) < 1e-9) return;
+
+    double xi = (b2 - b1) / (s1 - s2);
+    double zi = s1 * xi + b1;
+    QPoint ip = chartToWidget(xi, zi);
+
+    QPoint p1a = chartToWidget(m_hmLine1.xMin, s1 * m_hmLine1.xMin + b1);
+    QPoint p1b = chartToWidget(m_hmLine1.xMax, s1 * m_hmLine1.xMax + b1);
+    QPoint p2a = chartToWidget(m_hmLine2.xMin, s2 * m_hmLine2.xMin + b2);
+    QPoint p2b = chartToWidget(m_hmLine2.xMax, s2 * m_hmLine2.xMax + b2);
+
+    double ang1 = std::atan2(p1b.y() - p1a.y(), p1b.x() - p1a.x()) * 180.0 / M_PI;
+    double ang2 = std::atan2(p2b.y() - p2a.y(), p2b.x() - p2a.x()) * 180.0 / M_PI;
+
+    double startDeg, spanDeg;
+    switch (m_angleQuadrant) {
+        case AngleQuadrant::TopLeft:
+            startDeg = ang1 + 180.0; spanDeg = ang2 + 180.0 - startDeg; break;
+        case AngleQuadrant::TopRight:
+            startDeg = ang2; spanDeg = ang1 - ang2; break;
+        case AngleQuadrant::BottomLeft:
+            startDeg = ang1; spanDeg = ang2 - ang1; break;
+        case AngleQuadrant::BottomRight:
+        default:
+            startDeg = ang2 + 180.0; spanDeg = (ang1 + 180.0) - (ang2 + 180.0); break;
+    }
+    while (spanDeg >  180.0) spanDeg -= 360.0;
+    while (spanDeg < -180.0) spanDeg += 360.0;
+
+    const int R = 44;
+    int qtStart = static_cast<int>(-startDeg * 16);
+    int qtSpan  = static_cast<int>(-spanDeg  * 16);
+
+    painter.setPen(QPen(QColor(255, 220, 0), 2));
+    painter.setBrush(QBrush(QColor(255, 220, 0, 50)));
+    painter.drawPie(QRect(ip.x()-R, ip.y()-R, 2*R, 2*R), qtStart, qtSpan);
+
+    static const char* kNames[] = { "Oben-Links","Oben-Rechts","Unten-Links","Unten-Rechts" };
+    const int qi = static_cast<int>(m_angleQuadrant);
+    QString label = kNames[qi];
+    QFont lf = painter.font(); lf.setPointSize(9); lf.setBold(true);
+    painter.setFont(lf);
+    QFontMetrics lfm(lf);
+    int lw = lfm.horizontalAdvance(label) + 10, lh = lfm.height() + 4;
+    int lx = ip.x() + R + 8, ly = ip.y() - lh / 2;
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QColor(10, 10, 20, 180));
+    painter.drawRoundedRect(QRect(lx-2, ly, lw, lh), 3, 3);
+    painter.setPen(QColor(255, 220, 0));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawText(lx+2, ly+lfm.ascent()+2, label);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QColor(255, 220, 0, 200));
+    painter.drawEllipse(ip, 4, 4);
+}
+
 void ProfileChartView::paintEvent(QPaintEvent *e)
 {
     QChartView::paintEvent(e);
@@ -610,6 +685,7 @@ void ProfileChartView::paintEvent(QPaintEvent *e)
 
     // 4. Info panel (top-right summary box)
     drawInfoPanel(painter);
+    drawAngleArc(painter);
 
     // 5. ROI rubber-band while drawing
     if (m_dragging) {
@@ -856,6 +932,11 @@ void ProfileWidget::updateFitLines(
 
 void ProfileWidget::setFitLabels(const QString &m1Label, const QString &m2Label,
                                   double bendingAngleDeg)
+
+void ProfileWidget::setAngleQuadrant(AngleQuadrant q)
+{
+    m_chartView->setAngleQuadrant(q);
+}
 {
     m_chartView->setFitLabels(m1Label, m2Label, bendingAngleDeg);
 }

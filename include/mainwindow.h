@@ -67,6 +67,9 @@ private slots:
 
     // Measurement log
     void onLogToggle(bool checked);
+
+    // Quadrant selection
+    void onQuadrantSelected(AngleQuadrant q);
     void onLogBrowse();
     void onLogRowWritten(int row);
 
@@ -128,8 +131,13 @@ private:
 
     // Result display
     QLabel         *m_lblAngle     = nullptr;
-    QLabel         *m_lblPhi1      = nullptr;
-    QLabel         *m_lblPhi2      = nullptr;
+
+    // Quadrant selection buttons (replace Phi1/Phi2)
+    QPushButton    *m_btnQuadTL    = nullptr;  // top-left
+    QPushButton    *m_btnQuadTR    = nullptr;  // top-right
+    QPushButton    *m_btnQuadBL    = nullptr;  // bottom-left
+    QPushButton    *m_btnQuadBR    = nullptr;  // bottom-right
+    AngleQuadrant   m_angleQuadrant = AngleQuadrant::TopLeft;
 
     // JSON playback group
     QGroupBox      *m_playbackGroup= nullptr;

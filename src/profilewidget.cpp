@@ -586,66 +586,66 @@ void ProfileChartView::drawAngleArc(QPainter &painter)
     double zi = s1 * xi + b1;
     QPoint ip = chartToWidget(xi, zi);
 
-    // For each line, compute TWO ray directions from the intersection (screen pixels).
-    // Ray "A" points toward xMax end, Ray "B" points toward xMin end.
-    QPoint p1min = chartToWidget(m_hmLine1.xMin, s1*m_hmLine1.xMin+b1);
-    QPoint p1max = chartToWidget(m_hmLine1.xMax, s1*m_hmLine1.xMax+b1);
-    QPoint p2min = chartToWidget(m_hmLine2.xMin, s2*m_hmLine2.xMin+b2);
-    QPoint p2max = chartToWidget(m_hmLine2.xMax, s2*m_hmLine2.xMax+b2);
-
-    // Screen angles for the two directions of each line (degrees, screen CW from right)
-    double ang1max = std::atan2(p1max.y()-ip.y(), p1max.x()-ip.x()) * 180.0/M_PI;
-    double ang1min = std::atan2(p1min.y()-ip.y(), p1min.x()-ip.x()) * 180.0/M_PI;
-    double ang2max = std::atan2(p2max.y()-ip.y(), p2max.x()-ip.x()) * 180.0/M_PI;
-    double ang2min = std::atan2(p2min.y()-ip.y(), p2min.x()-ip.x()) * 180.0/M_PI;
-
-    // Choose one ray from each line based on which quadrant (chart coords):
-    // TopLeft    = X<xi, Z>zi  -> screen: left, up    -> screen Y smaller (Y inverted)
-    // TopRight   = X>xi, Z>zi  -> screen: right, up
-    // BottomLeft = X<xi, Z<zi  -> screen: left, down
-    // BottomRight= X>xi, Z<zi  -> screen: right, down
+    // Each line has two directions from the intersection.
+    // We pick the direction that goes into the correct CHART quadrant.
     //
-    // For each line pick the ray that points INTO the requested quadrant from xi,zi.
-    // "into quadrant" means: for TopLeft -> screen dx<0 AND screen dy<0
+    // For a point on line i at chart X = xi + delta:
+    //   if delta > 0 -> going right in chart (larger X)
+    //   Z = si*(xi+delta)+bi = zi + si*delta
+    //   so Z increases if si>0 (line goes up-right), decreases if si<0 (line goes down-right)
+    //
+    // Quadrant convention (in chart mm coordinates from intersection):
+    //   TopLeft:     X < xi  AND  Z > zi   -> chart dx<0, dz>0
+    //   TopRight:    X > xi  AND  Z > zi   -> chart dx>0, dz>0
+    //   BottomLeft:  X < xi  AND  Z < zi   -> chart dx<0, dz<0
+    //   BottomRight: X > xi  AND  Z < zi   -> chart dx>0, dz<0
+    //
+    // For line with slope s: going right (dx>0) means dz = s*dx
+    //   -> right direction: chart (dx=+1, dz=s)
+    //   -> left  direction: chart (dx=-1, dz=-s)
+    //
+    // We want the direction where BOTH dx and dz match the quadrant.
+    // For each line pick the direction (right=+1 or left=-1) that best matches.
 
-    auto pickRay = [&](double angMax, double angMin,
-                       bool wantLeft, bool wantUp) -> double {
-        // wantLeft: screen X < ip.x  wantUp: screen Y < ip.y (inverted)
-        auto score = [&](double ang) -> int {
-            double dx = std::cos(ang * M_PI / 180.0);
-            double dy = std::sin(ang * M_PI / 180.0);
-            int ok = 0;
-            if (wantLeft  && dx < -0.05) ok++;
-            if (!wantLeft && dx >  0.05) ok++;
-            if (wantUp    && dy < -0.05) ok++;
-            if (!wantUp   && dy >  0.05) ok++;
-            return ok;
-        };
-        return (score(angMax) >= score(angMin)) ? angMax : angMin;
-    };
-
-    bool wantLeft1, wantUp1, wantLeft2, wantUp2;
+    bool wantDxPos, wantDzPos;
     switch (m_angleQuadrant) {
-        case AngleQuadrant::TopLeft:
-            wantLeft1=true;  wantUp1=true;  wantLeft2=true;  wantUp2=true;  break;
-        case AngleQuadrant::TopRight:
-            wantLeft1=false; wantUp1=true;  wantLeft2=false; wantUp2=true;  break;
-        case AngleQuadrant::BottomLeft:
-            wantLeft1=true;  wantUp1=false; wantLeft2=true;  wantUp2=false; break;
+        case AngleQuadrant::TopLeft:     wantDxPos=false; wantDzPos=true;  break;
+        case AngleQuadrant::TopRight:    wantDxPos=true;  wantDzPos=true;  break;
+        case AngleQuadrant::BottomLeft:  wantDxPos=false; wantDzPos=false; break;
         case AngleQuadrant::BottomRight:
-        default:
-            wantLeft1=false; wantUp1=false; wantLeft2=false; wantUp2=false; break;
+        default:                         wantDxPos=true;  wantDzPos=false; break;
     }
 
-    double r1 = pickRay(ang1max, ang1min, wantLeft1, wantUp1);
-    double r2 = pickRay(ang2max, ang2min, wantLeft2, wantUp2);
+    // For line i with slope si: rightward direction chart = (1, si), leftward = (-1,-si)
+    // Pick the direction sign (+1 or -1 in X) that matches the quadrant better
+    auto pickSign = [&](double slope) -> double {
+        // rightward: dx=+1, dz=slope  -> score
+        int scoreRight = 0, scoreLeft = 0;
+        if  (wantDxPos)                          scoreRight++; else scoreLeft++;
+        if  (wantDzPos  && slope > 0)            scoreRight++;
+        if  (wantDzPos  && slope < 0)            scoreLeft++;
+        if  (!wantDzPos && slope < 0)            scoreRight++;
+        if  (!wantDzPos && slope > 0)            scoreLeft++;
+        return (scoreRight >= scoreLeft) ? 1.0 : -1.0;
+    };
 
-    // Normalise span so it sweeps through the correct quadrant (max 180 deg)
+    double sign1 = pickSign(s1);
+    double sign2 = pickSign(s2);
+
+    // Convert chart directions to screen angles
+    // Chart (dx, dz) -> screen: X maps normally, Z maps inverted (Z up = screen up = smaller Y)
+    double screen_ang1 = std::atan2(-(sign1 * s1), sign1) * 180.0 / M_PI;
+    double screen_ang2 = std::atan2(-(sign2 * s2), sign2) * 180.0 / M_PI;
+
+    double r1 = screen_ang1;
+    double r2 = screen_ang2;
+
+    // Normalise span so arc sweeps <= 180 deg
     while (r2 - r1 >  180.0) r2 -= 360.0;
     while (r2 - r1 < -180.0) r2 += 360.0;
 
-    // Qt drawPie: CCW positive, angle in 1/16 deg from +X rightward (screen)
-    // Screen Y is DOWN, so CCW in screen = CW in math -> negate both
+    // Qt drawPie: CCW positive from +X right, 1/16 degree units
+    // Screen Y DOWN: Qt CCW = screen CW = negate angles
     const int R = 44;
     int qtStart = static_cast<int>(-r1 * 16.0);
     int qtSpan  = static_cast<int>(-(r2 - r1) * 16.0);

@@ -293,6 +293,8 @@ void SensorWorker::run()
                 }
             }
         }
+    }  // while (!m_stopRequested)
+
     // Stop sensor
     proto.sendCommand(CMD_STOP, "");
     QThread::msleep(100);

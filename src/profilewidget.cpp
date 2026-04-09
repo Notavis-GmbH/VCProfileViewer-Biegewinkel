@@ -564,19 +564,36 @@ void ProfileChartView::drawWatermark(QPainter &painter)
     QRectF pa = chart()->plotArea();
     if (pa.width() < 50 || pa.height() < 50) return;
 
-    // Target size: width = 18% of plot width, maintain aspect ratio (1000:360)
-    const double aspect = 1000.0 / 360.0;
-    int w = static_cast<int>(pa.width() * 0.18);
-    int h = static_cast<int>(w / aspect);
-    int x = static_cast<int>(pa.right())  - w - 12;
-    int y = static_cast<int>(pa.bottom()) - h - 12;
+    // Try Qt resource first, then filesystem fallback next to EXE
+    static QSvgRenderer s_renderer;
+    static bool s_loaded = false;
+    if (!s_loaded) {
+        s_loaded = true;
+        if (!s_renderer.load(QString(":/images/logo_notavis.svg"))) {
+            // Fallback: look next to executable
+            const QString fsPath = QCoreApplication::applicationDirPath()
+                                   + "/resources/logo_notavis.svg";
+            s_renderer.load(fsPath);
+            if (s_renderer.isValid())
+                qInfo() << "[Watermark] Loaded from filesystem:" << fsPath;
+            else
+                qWarning() << "[Watermark] SVG not found via resource or filesystem";
+        } else {
+            qInfo() << "[Watermark] Loaded from Qt resource";
+        }
+    }
+    if (!s_renderer.isValid()) return;
 
-    QSvgRenderer renderer(QString(":/images/logo_notavis.svg"));
-    if (!renderer.isValid()) return;
+    // Target size: width = 20% of plot width, aspect ratio 1000:360
+    const double aspect = 1000.0 / 360.0;
+    int w = static_cast<int>(pa.width() * 0.20);
+    int h = static_cast<int>(w / aspect);
+    int x = static_cast<int>(pa.right())  - w - 16;
+    int y = static_cast<int>(pa.bottom()) - h - 16;
 
     painter.save();
-    painter.setOpacity(0.13);  // subtle watermark
-    renderer.render(&painter, QRectF(x, y, w, h));
+    painter.setOpacity(0.18);  // subtle but visible
+    s_renderer.render(&painter, QRectF(x, y, w, h));
     painter.restore();
 }
 

@@ -22,7 +22,6 @@ endif()
 
 # ── Sources ───────────────────────────────────────────────────────────────────
 set(SOURCES
-    resources/resources.qrc
     src/main.cpp
     src/mainwindow.cpp
     src/profilewidget.cpp
@@ -52,6 +51,20 @@ endif()
 target_include_directories(VC3DProfileViewer PRIVATE include)
 target_link_libraries(VC3DProfileViewer PRIVATE ${QT_TARGET})
 
+# ── Embed resources (logo SVG) ────────────────────────────────────────────────
+if(COMMAND qt_add_resources)
+    # Qt6 style
+    qt_add_resources(VC3DProfileViewer "app_resources"
+        PREFIX "/images"
+        BASE "${CMAKE_SOURCE_DIR}/resources"
+        FILES resources/logo_notavis.svg
+    )
+else()
+    # Qt5 style
+    qt5_add_resources(RESOURCE_FILES resources/resources.qrc)
+    target_sources(VC3DProfileViewer PRIVATE ${RESOURCE_FILES})
+endif()
+
 # ── Output directory ──────────────────────────────────────────────────────────
 # Release build goes to bin/Release – you then run windeployqt there
 set_target_properties(VC3DProfileViewer PROPERTIES
@@ -72,5 +85,11 @@ add_custom_command(TARGET VC3DProfileViewer POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${CMAKE_SOURCE_DIR}/tests/data"
         "$<TARGET_FILE_DIR:VC3DProfileViewer>/TestData"
-    COMMENT "Creating portable folder structure + copying TestData profiles"
+    # Copy SVG next to EXE as filesystem fallback for watermark
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        "$<TARGET_FILE_DIR:VC3DProfileViewer>/resources"
+    COMMAND ${CMAKE_COMMAND} -E copy
+        "${CMAKE_SOURCE_DIR}/resources/logo_notavis.svg"
+        "$<TARGET_FILE_DIR:VC3DProfileViewer>/resources/logo_notavis.svg"
+    COMMENT "Creating portable folder structure + copying TestData + resources"
 )

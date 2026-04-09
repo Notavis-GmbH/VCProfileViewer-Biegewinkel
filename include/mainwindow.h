@@ -127,13 +127,9 @@ private:
     QLabel         *m_lblMethod2   = nullptr;   // shows chosen method in Auto mode
 
     // Result display
-    QLabel              *m_lblAngle          = nullptr;
-    QLabel              *m_lblAngleDelta     = nullptr;  // Abweichung Ist-Soll
-    QLabel              *m_lblPhi1           = nullptr;
-    QLabel              *m_lblPhi2           = nullptr;
-    QDoubleSpinBox      *m_spinTargetAngle   = nullptr;  // Sollwinkel
-    QDoubleSpinBox      *m_spinTolerance     = nullptr;  // Toleranz ±
-    double               m_lastBendingAngle  = 0.0;
+    QLabel         *m_lblAngle     = nullptr;
+    QLabel         *m_lblPhi1      = nullptr;
+    QLabel         *m_lblPhi2      = nullptr;
 
     // JSON playback group
     QGroupBox      *m_playbackGroup= nullptr;

@@ -106,6 +106,7 @@ private:
 
     // Helper: draw angle arc at intersection
     void    drawAngleArc(QPainter &painter);
+    void    drawWatermark(QPainter &painter);
 };
 
 // -----------------------------------------------------------------------

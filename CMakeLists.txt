@@ -8,20 +8,21 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
 # ── Qt: try Qt6 first, fall back to Qt5 ──────────────────────────────────────
-find_package(Qt6 COMPONENTS Core Gui Widgets Charts Network QUIET)
+find_package(Qt6 COMPONENTS Core Gui Widgets Charts Network Svg QUIET)
 if(Qt6_FOUND)
     message(STATUS "Using Qt6")
-    set(QT_TARGET Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Charts Qt6::Network)
+    set(QT_TARGET Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Charts Qt6::Network Qt6::Svg)
     set(QT_PREFIX  Qt6)
 else()
-    find_package(Qt5 REQUIRED COMPONENTS Core Gui Widgets Charts Network)
+    find_package(Qt5 REQUIRED COMPONENTS Core Gui Widgets Charts Network Svg)
     message(STATUS "Using Qt5")
-    set(QT_TARGET Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Charts Qt5::Network)
+    set(QT_TARGET Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Charts Qt5::Network Qt5::Svg)
     set(QT_PREFIX  Qt5)
 endif()
 
 # ── Sources ───────────────────────────────────────────────────────────────────
 set(SOURCES
+    resources/resources.qrc
     src/main.cpp
     src/mainwindow.cpp
     src/profilewidget.cpp

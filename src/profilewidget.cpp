@@ -2,6 +2,7 @@
 ** profilewidget.cpp
 ****************************************************************************/
 #include "profilewidget.h"
+#include <QtSvg/QSvgRenderer>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPen>
@@ -553,6 +554,30 @@ void ProfileChartView::drawDocOverlay(QPainter &painter)
     painter.setPen(QColor(120, 120, 150));
     painter.drawText(QRect(x, y, w, bodyLineH),
                      Qt::AlignRight | Qt::AlignVCenter, "[ ? ] zum Schließen");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  drawWatermark – NOTAVIS logo, semi-transparent, bottom-right of plot area
+// ─────────────────────────────────────────────────────────────────────────────
+void ProfileChartView::drawWatermark(QPainter &painter)
+{
+    QRectF pa = chart()->plotArea();
+    if (pa.width() < 50 || pa.height() < 50) return;
+
+    // Target size: width = 18% of plot width, maintain aspect ratio (1000:360)
+    const double aspect = 1000.0 / 360.0;
+    int w = static_cast<int>(pa.width() * 0.18);
+    int h = static_cast<int>(w / aspect);
+    int x = static_cast<int>(pa.right())  - w - 12;
+    int y = static_cast<int>(pa.bottom()) - h - 12;
+
+    QSvgRenderer renderer(QString(":/images/logo_notavis.svg"));
+    if (!renderer.isValid()) return;
+
+    painter.save();
+    painter.setOpacity(0.13);  // subtle watermark
+    renderer.render(&painter, QRectF(x, y, w, h));
+    painter.restore();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

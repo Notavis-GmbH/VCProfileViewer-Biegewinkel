@@ -1620,9 +1620,20 @@ void MainWindow::applyPreset(const QString &name)
     { RoiRect r; r.xMin = m_roi1Start->value(); r.xMax = m_roi1End->value(); r.valid = (r.xMax > r.xMin); m_profileWidget->setRoi(0, r); }
     { RoiRect r; r.xMin = m_roi2Start->value(); r.xMax = m_roi2End->value(); r.valid = (r.xMax > r.xMin); m_profileWidget->setRoi(1, r); }
 
-    // Update folder field but don't load/play – user decides when to start
-    if (!folder.isEmpty() && presetMode == 1)
-        m_editFolder->setText(folder);
+    // Load JSON folder into player (updates file list + frame counter)
+    // but do NOT auto-play – user still has to press Play manually.
+    // Also: don't force source mode switch, user stays in current mode.
+    if (!folder.isEmpty()) {
+        // Expand relative paths (e.g. "TestData") to absolute
+        QString absFolder = folder;
+        if (QDir(absFolder).isRelative())
+            absFolder = QDir(QApplication::applicationDirPath()).filePath(absFolder);
+        m_editFolder->setText(absFolder);
+        if (QDir(absFolder).exists()) {
+            qInfo().noquote() << "[Preset] Lade JSON-Ordner (kein Auto-Play):" << absFolder;
+            m_jsonPlayer->loadFolder(absFolder);
+        }
+    }
 
     m_presetLoading = false;
 
@@ -1801,32 +1812,12 @@ void MainWindow::loadSettings()
                 .arg(QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss"))));
     }
 
-    // Seed "TestData-Setup" template whenever the group is missing
+    // Seed presets (only TestTyp_1 – TestData-Setup removed)
     {
         QSettings ps(presetsPath(), QSettings::IniFormat);
-        if (!ps.childGroups().contains("TestData-Setup")) {
-            const QString testDataPath =
-                QDir(QApplication::applicationDirPath()).filePath("TestData");
-            const QString defaultLogPath =
-                QDir(QApplication::applicationDirPath()).filePath(
-                    QString("Logs/MeasLog_%1.csv")
-                        .arg(QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss")));
-            ps.beginGroup("TestData-Setup");
-            ps.setValue("Sensor_IP",       "192.168.3.15");
-            ps.setValue("Sensor_Port",     "1096");
-            ps.setValue("ROI1_Start",      -44.0);
-            ps.setValue("ROI1_End",         -3.0);
-            ps.setValue("ROI1_Method",      3);    // Auto
-            ps.setValue("ROI2_Start",       18.0);
-            ps.setValue("ROI2_End",         55.0);
-            ps.setValue("ROI2_Method",      3);    // Auto
-            ps.setValue("Playback_Folder", QString("TestData"));  // relative – expanded at load time
-            ps.setValue("Playback_Speed",  5);     // 1.0×
-            ps.setValue("Source_Mode",     1);     // JSON Wiedergabe
-            ps.setValue("Log_Path",        defaultLogPath);
-            ps.endGroup();
-        }
-
+        // Remove legacy TestData-Setup if it exists
+        if (ps.childGroups().contains("TestData-Setup"))
+            ps.remove("TestData-Setup");
         // Seed "TestTyp_1" preset with actual recording settings
         if (!ps.childGroups().contains("TestTyp_1")) {
             const QString recPath =

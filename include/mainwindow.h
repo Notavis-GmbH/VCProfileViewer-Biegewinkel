@@ -71,6 +71,10 @@ private slots:
 
     // Quadrant selection
     void onQuadrantSelected(AngleQuadrant q);
+
+    // JSON Profile Recorder
+    void onRecordToggle(bool checked);
+    void onRecordBrowse();
     void onLogBrowse();
     void onLogRowWritten(int row);
 
@@ -87,6 +91,8 @@ private:
     void buildPlaybackGroup(QWidget *parent, class QVBoxLayout *layout);
     void buildLogGroup(QWidget *parent, class QVBoxLayout *layout);
     void buildPresetGroup(QWidget *parent, class QVBoxLayout *layout);
+    void buildRecorderGroup(QWidget *parent, class QVBoxLayout *layout);
+    void recordFrame(const std::vector<ProfilePoint> &pts);
     void buildStatusBar();
 
     // Preset helpers
@@ -169,6 +175,17 @@ private:
     QPushButton    *m_btnPresetRen  = nullptr;
     QPushButton    *m_btnPresetDel  = nullptr;
     bool            m_presetLoading = false;  // suppress recursive signals during applyPreset
+
+    // JSON Profile Recorder
+    QGroupBox      *m_recorderGroup    = nullptr;
+    QLineEdit      *m_editRecordFolder = nullptr;
+    QPushButton    *m_btnRecordBrowse  = nullptr;
+    QPushButton    *m_btnRecordToggle  = nullptr;
+    QLabel         *m_lblRecordStatus  = nullptr;
+    QSpinBox       *m_spinMaxFrames    = nullptr;
+    bool            m_recording        = false;
+    int             m_recordCount      = 0;
+    QString         m_recordFolder;
 
     // ── Backend objects ───────────────────────
     SensorWorker        *m_sensorWorker = nullptr;

@@ -22,6 +22,10 @@
 #include <QStandardPaths>
 #include <QDir>
 #include <QApplication>
+#include <QJsonDocument>
+#include <QJsonArray>
+#include <QJsonObject>
+#include <QSpinBox>
 #include <QFont>
 #include <QFrame>
 #include <QScrollArea>
@@ -439,7 +443,7 @@ static FitLine fitLine(const std::vector<ProfilePoint> &pts,
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
 {
-    setWindowTitle("VC 3D Profile Viewer  v2.0");
+    setWindowTitle("VC 3D Profile Viewer  v2.1");
     setMinimumSize(1100, 700);
 
     // JSON player (no thread needed – all Qt slots, no blocking I/O)
@@ -582,6 +586,10 @@ void MainWindow::buildUi()
 
     // Log group
     buildLogGroup(leftPanel, leftLayout);
+
+    // Recorder group
+    m_recorderGroup = new QGroupBox("Profil-Aufnahme (JSON)");
+    buildRecorderGroup(leftPanel, leftLayout);
 
     leftLayout->addStretch();
 
@@ -797,6 +805,156 @@ void MainWindow::buildPresetGroup(QWidget * /*parent*/, QVBoxLayout *layout)
     connect(m_btnPresetDel,  &QPushButton::clicked, this, &MainWindow::onPresetDelete);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  buildRecorderGroup – JSON Profile Recorder UI
+// ─────────────────────────────────────────────────────────────────────────────
+void MainWindow::buildRecorderGroup(QWidget * /*parent*/, QVBoxLayout *layout)
+{
+    QVBoxLayout *vbl = new QVBoxLayout(m_recorderGroup);
+    vbl->setSpacing(5);
+
+    // Folder row
+    QHBoxLayout *folderRow = new QHBoxLayout;
+    m_editRecordFolder = new QLineEdit;
+    m_editRecordFolder->setPlaceholderText("Aufnahme-Ordner wählen…");
+    m_editRecordFolder->setReadOnly(false);
+    m_btnRecordBrowse = new QPushButton("…");
+    m_btnRecordBrowse->setMaximumWidth(32);
+    m_btnRecordBrowse->setToolTip("Zielordner für JSON-Dateien wählen");
+    folderRow->addWidget(m_editRecordFolder);
+    folderRow->addWidget(m_btnRecordBrowse);
+    vbl->addLayout(folderRow);
+
+    // Max frames row
+    QHBoxLayout *maxRow = new QHBoxLayout;
+    QLabel *lblMax = new QLabel("Max. Frames (0 = unbegrenzt):");
+    lblMax->setStyleSheet("color:#aaa; font-size:10px;");
+    m_spinMaxFrames = new QSpinBox;
+    m_spinMaxFrames->setRange(0, 100000);
+    m_spinMaxFrames->setValue(0);
+    m_spinMaxFrames->setMaximumWidth(80);
+    m_spinMaxFrames->setToolTip("0 = keine Begrenzung");
+    m_spinMaxFrames->setStyleSheet(
+        "background:#222; color:white; border:1px solid #555; border-radius:3px; padding:2px 4px;");
+    maxRow->addWidget(lblMax);
+    maxRow->addStretch();
+    maxRow->addWidget(m_spinMaxFrames);
+    vbl->addLayout(maxRow);
+
+    // Toggle button
+    m_btnRecordToggle = new QPushButton("⏺  Aufnahme starten");
+    m_btnRecordToggle->setCheckable(true);
+    m_btnRecordToggle->setStyleSheet(
+        "background:#1a5c2e; color:white; padding:5px; border-radius:4px;");
+    vbl->addWidget(m_btnRecordToggle);
+
+    // Status label
+    m_lblRecordStatus = new QLabel("Bereit – nur im Live-Sensor-Modus");
+    m_lblRecordStatus->setStyleSheet("color:#888; font-size:10px;");
+    vbl->addWidget(m_lblRecordStatus);
+
+    layout->addWidget(m_recorderGroup);
+
+    // Default folder
+    m_editRecordFolder->setText(
+        QDir(QApplication::applicationDirPath()).filePath("Recordings"));
+
+    connect(m_btnRecordBrowse, &QPushButton::clicked, this, &MainWindow::onRecordBrowse);
+    connect(m_btnRecordToggle, &QPushButton::toggled, this, &MainWindow::onRecordToggle);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Recorder Slots
+// ─────────────────────────────────────────────────────────────────────────────
+void MainWindow::onRecordBrowse()
+{
+    QString dir = QFileDialog::getExistingDirectory(
+        this, "Aufnahme-Ordner wählen",
+        m_editRecordFolder->text().isEmpty()
+            ? QDir(QApplication::applicationDirPath()).filePath("Recordings")
+            : m_editRecordFolder->text());
+    if (!dir.isEmpty())
+        m_editRecordFolder->setText(dir);
+}
+
+void MainWindow::onRecordToggle(bool checked)
+{
+    if (checked) {
+        // Only allow recording in live sensor mode
+        if (m_sourceMode != SourceMode::LiveSensor) {
+            QMessageBox::information(this, "Profil-Aufnahme",
+                "Die Aufnahme ist nur im Live-Sensor-Modus verfügbar.");
+            m_btnRecordToggle->setChecked(false);
+            return;
+        }
+        QString folder = m_editRecordFolder->text().trimmed();
+        if (folder.isEmpty())
+            folder = QDir(QApplication::applicationDirPath()).filePath("Recordings");
+        QDir().mkpath(folder);
+        m_recordFolder = folder;
+        m_recordCount  = 0;
+        m_recording    = true;
+        m_btnRecordToggle->setText("⏹  Aufnahme stoppen");
+        m_btnRecordToggle->setStyleSheet(
+            "background:#5c1a1a; color:white; padding:5px; border-radius:4px;");
+        m_lblRecordStatus->setText("<b style='color:#ff5555'>⏺  Aufnahme läuft…</b>");
+        qInfo().noquote() << "[Recorder] Aufnahme gestartet:" << folder;
+    } else {
+        m_recording = false;
+        m_btnRecordToggle->setText("⏺  Aufnahme starten");
+        m_btnRecordToggle->setStyleSheet(
+            "background:#1a5c2e; color:white; padding:5px; border-radius:4px;");
+        m_lblRecordStatus->setText(
+            QString("Gespeichert: %1 Frame%2  →  %3")
+                .arg(m_recordCount)
+                .arg(m_recordCount == 1 ? "" : "s")
+                .arg(QDir::toNativeSeparators(m_recordFolder)));
+        qInfo().noquote() << QString("[Recorder] Aufnahme gestoppt: %1 Frames → %2")
+            .arg(m_recordCount).arg(m_recordFolder);
+    }
+}
+
+void MainWindow::recordFrame(const std::vector<ProfilePoint> &pts)
+{
+    if (!m_recording || pts.empty()) return;
+
+    // Auto-stop at max frames
+    const int maxF = m_spinMaxFrames->value();
+    if (maxF > 0 && m_recordCount >= maxF) {
+        m_btnRecordToggle->setChecked(false);  // triggers onRecordToggle(false)
+        return;
+    }
+
+    // Build filename: LaserLineData_YYYYMMDD_HHmmsszzzzzz.json
+    const QString ts = QDateTime::currentDateTime().toString("yyyyMMdd_HHmmsszzz");
+    const QString fileName = QString("LaserLineData_%1.json").arg(ts);
+    const QString filePath = QDir(m_recordFolder).filePath(fileName);
+
+    // Serialize as JSON array [{"x":…,"y":…}, …]
+    QJsonArray arr;
+    for (const auto &pt : pts) {
+        QJsonObject obj;
+        obj["x"] = static_cast<double>(pt.x_mm);
+        obj["y"] = static_cast<double>(pt.z_mm);  // y in JSON = Z height
+        arr.append(obj);
+    }
+    QJsonDocument doc(arr);
+
+    QFile f(filePath);
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        qWarning().noquote() << "[Recorder] Kann Datei nicht schreiben:" << filePath;
+        return;
+    }
+    f.write(doc.toJson(QJsonDocument::Indented));
+    f.close();
+
+    ++m_recordCount;
+    m_lblRecordStatus->setText(
+        QString("<b style='color:#ff5555'>⏺  Aufnahme: %1 Frame%2</b>")
+            .arg(m_recordCount)
+            .arg(m_recordCount == 1 ? "" : "s"));
+}
+
 void MainWindow::buildPlaybackGroup(QWidget * /*parent*/, QVBoxLayout *layout)
 {
     QVBoxLayout *vbl = new QVBoxLayout(m_playbackGroup);
@@ -955,6 +1113,8 @@ void MainWindow::onSensorData(const std::vector<ProfilePoint> &points)
 {
     m_lastProfilePts = points;
     m_profileWidget->updateProfile(points);
+    // Record frame to JSON if recording is active
+    if (m_recording) recordFrame(points);
     // Throttle fit computation to ~30 Hz to keep UI responsive
     if (m_fitRateTimer.elapsed() >= 33) {
         m_fitRateTimer.restart();

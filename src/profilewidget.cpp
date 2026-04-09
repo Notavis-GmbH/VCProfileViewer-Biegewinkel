@@ -562,6 +562,17 @@ void ProfileChartView::drawAngleArc(QPainter &painter)
 {
     if (!m_hmLine1.valid || !m_hmLine2.valid) return;
 
+    // Guard: axes must be valid before calling chartToWidget
+    if (chart()->axes(Qt::Horizontal).isEmpty() ||
+        chart()->axes(Qt::Vertical).isEmpty()) return;
+    {
+        QValueAxis *axX = qobject_cast<QValueAxis*>(chart()->axes(Qt::Horizontal).first());
+        QValueAxis *axZ = qobject_cast<QValueAxis*>(chart()->axes(Qt::Vertical).first());
+        if (!axX || !axZ) return;
+        if ((axX->max() - axX->min()) < 1e-9) return;
+        if ((axZ->max() - axZ->min()) < 1e-9) return;
+    }
+
     double s1 = m_hmLine1.slope, b1 = m_hmLine1.intercept;
     double s2 = m_hmLine2.slope, b2 = m_hmLine2.intercept;
     if (std::abs(s2 - s1) < 1e-9) return;

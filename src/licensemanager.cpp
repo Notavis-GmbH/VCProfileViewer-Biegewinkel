@@ -177,7 +177,9 @@ bool LicenseManager::activateCommercialLicense(const QString& licenseKey)
         return false;
     }
 
-    const QString authToken = QStringLiteral("License ") + licenseKey;
+    // Policy hat authenticationStrategy=TOKEN → Product Token für /machines erforderlich
+    const QString authToken = QStringLiteral("Bearer ")
+                              + QLatin1String(KeygenConfig::KEYGEN_PRODUCT_TOKEN);
 
     QJsonObject machineAttrs;
     machineAttrs[QLatin1String("fingerprint")] = fingerprint;

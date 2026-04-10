@@ -472,10 +472,9 @@ QJsonDocument LicenseManager::postJson(const QString& endpoint,
 
     const QByteArray body = QJsonDocument(payload).toJson(QJsonDocument::Compact);
 
-    // Eigener QNetworkAccessManager pro Request — vermeidet Probleme mit
-    // verschachtelten Event-Loops wenn aus einem modalen Dialog aufgerufen.
-    QNetworkAccessManager nam;
-    QNetworkReply* reply = nam.post(request, body);
+    // m_networkManager wiederverwenden — vermeidet SSL-Session-Probleme
+    // bei aufeinanderfolgenden Requests (z.B. /licenses dann /machines).
+    QNetworkReply* reply = m_networkManager->post(request, body);
 
     // Synchron warten mit eigenem QEventLoop — aber auf dem Stack des Callers,
     // nicht verschachtelt in einem bestehenden Loop.
@@ -535,8 +534,7 @@ QJsonDocument LicenseManager::getJson(const QString& endpoint,
         request.setRawHeader("Authorization", authToken.toUtf8());
     }
 
-    QNetworkAccessManager nam;
-    QNetworkReply* reply = nam.get(request);
+    QNetworkReply* reply = m_networkManager->get(request);
 
     QEventLoop loop;
     QTimer timeoutTimer;

@@ -442,6 +442,7 @@ void ProfileChartView::drawDocOverlay(QPainter &painter)
     const int titleLineH   = fmTitle.height()   + 4;
     const int sectionLineH = fmSection.height() + 6;
     const int bodyLineH    = fmBody.height()    + 4;
+    const int versionLineH = fmBody.height() + 2;
     const int sectionGap   = 6;   // extra space before each section
     const int closeHintH   = bodyLineH + 8;
     const int paddingV     = 20;  // top + bottom padding

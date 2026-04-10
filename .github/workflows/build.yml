@@ -98,7 +98,8 @@ jobs:
         } else {
             Copy-Item -Path "tests\data\*" -Destination "$pkg\TestData" -Force
         }
-        Copy-Item README.txt $pkg -Force
+        if (Test-Path README.md)  { Copy-Item README.md  $pkg -Force }
+        if (Test-Path README.txt) { Copy-Item README.txt $pkg -Force }
         # Copy SVG resources for watermark
         if (Test-Path "${{ env.EXE_DIR }}\resources") {
             New-Item -ItemType Directory "$pkg\resources" -Force | Out-Null

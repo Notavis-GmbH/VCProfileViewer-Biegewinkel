@@ -317,7 +317,10 @@ bool LicenseManager::startTrial()
                        << "Ablauf:" << expiryStr;
 
     // --- Schritt 2: Diese Maschine für die Trial-Lizenz aktivieren ---
-    const QString licenseAuth = QStringLiteral("License ") + licenseKey;
+    // Policy hat authenticationStrategy=TOKEN + protected=true
+    // => Product Token als Bearer verwenden, nicht "License <key>"
+    const QString licenseAuth = QStringLiteral("Bearer ")
+                              + QLatin1String(KeygenConfig::KEYGEN_PRODUCT_TOKEN);
 
     QJsonObject machineAttrs;
     machineAttrs[QLatin1String("fingerprint")] = fingerprint;

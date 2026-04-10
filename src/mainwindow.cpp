@@ -1822,7 +1822,13 @@ void MainWindow::loadSettings()
     m_roi2Method->setCurrentIndex(s.value("ROI2/Method", 0).toInt());
 
     QString folder = s.value("Playback/Folder", "").toString();
-    if (!folder.isEmpty()) m_editFolder->setText(folder);
+    if (!folder.isEmpty()) {
+        m_editFolder->setText(folder);
+        // fix: loadFolder aufrufen, damit m_files befüllt wird und Play sofort
+        // funktioniert – ohne manuellen Ordneraufruf (war vorher fehlend)
+        if (QDir(folder).exists())
+            m_jsonPlayer->loadFolder(folder);
+    }
 
     m_speedSlider->setValue(s.value("Playback/Speed", 5).toInt());
     onSpeedSliderChanged(m_speedSlider->value());  // refresh label
@@ -1853,7 +1859,7 @@ void MainWindow::loadSettings()
                 .arg(QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss"))));
     }
 
-    // Seed presets (only TestTyp_1 – TestData-Setup removed)
+    // Seed presets (TestTyp_1 + TestTyp_1_Sub)
     {
         QSettings ps(presetsPath(), QSettings::IniFormat);
         // Remove legacy TestData-Setup if it exists
@@ -1873,6 +1879,26 @@ void MainWindow::loadSettings()
             ps.setValue("ROI2_End",        106.0);
             ps.setValue("ROI2_Method",       2);    // Hough
             ps.setValue("Playback_Folder", recPath);
+            ps.setValue("Playback_Speed",    5);    // 1.0x
+            ps.setValue("Source_Mode",       1);    // JSON Wiedergabe
+            ps.setValue("Log_Path",          QString());
+            ps.endGroup();
+        }
+        // Seed "TestTyp_1_Sub" – zeigt auf TestData\Sub1 (Unterordner-Beispiel).
+        // Ordner wird beim ersten Start automatisch geladen (loadFolder-Fix oben).
+        if (!ps.childGroups().contains("TestTyp_1_Sub")) {
+            const QString subPath =
+                QDir(QApplication::applicationDirPath()).filePath("TestData\\Sub1");
+            ps.beginGroup("TestTyp_1_Sub");
+            ps.setValue("Sensor_IP",       "192.168.3.15");
+            ps.setValue("Sensor_Port",     "1096");
+            ps.setValue("ROI1_Start",      -38.0);
+            ps.setValue("ROI1_End",          0.0);
+            ps.setValue("ROI1_Method",       2);    // Hough
+            ps.setValue("ROI2_Start",        0.0);
+            ps.setValue("ROI2_End",        106.0);
+            ps.setValue("ROI2_Method",       2);    // Hough
+            ps.setValue("Playback_Folder", subPath);
             ps.setValue("Playback_Speed",    5);    // 1.0x
             ps.setValue("Source_Mode",       1);    // JSON Wiedergabe
             ps.setValue("Log_Path",          QString());

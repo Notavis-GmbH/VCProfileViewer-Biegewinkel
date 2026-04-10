@@ -1,7 +1,8 @@
 // =============================================================================
 // licensemanager.cpp
 // Vollständige Implementierung aller Lizenzverwaltungsmethoden.
-// Nutzt QNetworkAccessManager mit lokalem QEventLoop für synchrone API-Aufrufe.
+// Nutzt QNetworkAccessManager mit QNetworkReply::waitForReadyRead()
+// für blockierende HTTP-Calls ohne verschachtelten QEventLoop.
 // =============================================================================
 
 #include "licensemanager.h"
@@ -11,12 +12,13 @@
 #include <QNetworkInterface>
 #include <QSysInfo>
 #include <QSettings>
-#include <QEventLoop>
 #include <QTimer>
 #include <QLoggingCategory>
 #include <QNetworkRequest>
+#include <QNetworkReply>
 #include <QUrl>
 #include <QJsonArray>
+#include <QEventLoop>
 
 // Logging-Kategorie für alle Lizenz-bezogenen Meldungen
 Q_LOGGING_CATEGORY(licenseLog, "app.license")
@@ -28,27 +30,20 @@ LicenseManager::LicenseManager(QObject* parent)
     : QObject(parent)
     , m_networkManager(new QNetworkAccessManager(this))
 {
-    // TLS-Fehler ignorieren in Entwicklung — in Produktion entfernen!
-    // connect(m_networkManager, &QNetworkAccessManager::sslErrors, ...);
 }
 
 // ---------------------------------------------------------------------------
 // generateFingerprint()
-// Kombiniert MAC-Adresse + CPU-Modell + Hostname und bildet SHA-256 Hash.
-// Das Ergebnis ist ein hex-kodierter String (64 Zeichen).
 // ---------------------------------------------------------------------------
 QString LicenseManager::generateFingerprint()
 {
-    // Zwischengespeicherten Fingerabdruck zurückgeben falls vorhanden
     if (!m_cachedFingerprint.isEmpty()) {
         return m_cachedFingerprint;
     }
 
-    // --- 1. MAC-Adresse: erste nicht-Loopback Interface ---
     QString macAddress;
     const auto interfaces = QNetworkInterface::allInterfaces();
     for (const QNetworkInterface& iface : interfaces) {
-        // Loopback und virtuelle Interfaces überspringen
         if (iface.flags().testFlag(QNetworkInterface::IsLoopBack)) {
             continue;
         }
@@ -59,23 +54,16 @@ QString LicenseManager::generateFingerprint()
         }
     }
 
-    // Fallback falls keine MAC-Adresse gefunden
     if (macAddress.isEmpty()) {
         macAddress = "00:00:00:00:00:00";
         qCWarning(licenseLog) << "Keine MAC-Adresse gefunden, verwende Fallback.";
     }
 
-    // --- 2. CPU-Modell aus Qt-Systeminformationen ---
-    // QSysInfo::currentCpuArchitecture() gibt z.B. "x86_64", "arm64"
-    // Für detailliertere CPU-Info plattformspezifisch erweitern
     const QString cpuModel = QSysInfo::currentCpuArchitecture()
                            + QLatin1Char('/')
                            + QSysInfo::buildCpuArchitecture();
-
-    // --- 3. Rechnername (Hostname) ---
     const QString hostname = QSysInfo::machineHostName();
 
-    // --- 4. Alle Komponenten zusammenführen und SHA-256 bilden ---
     const QString combined = macAddress
                            + QLatin1Char('|')
                            + cpuModel
@@ -100,8 +88,6 @@ QString LicenseManager::generateFingerprint()
 
 // ---------------------------------------------------------------------------
 // checkLicense()
-// Liest gespeicherte Lizenz aus QSettings, validiert online gegen Keygen.sh.
-// Gibt den aktuellen LicenseStatus zurück.
 // ---------------------------------------------------------------------------
 LicenseStatus LicenseManager::checkLicense()
 {
@@ -109,7 +95,6 @@ LicenseStatus LicenseManager::checkLicense()
     const QString licenseKey  = settings.value(KeygenConfig::SETTINGS_LICENSE_KEY).toString();
     const QString licenseType = settings.value(KeygenConfig::SETTINGS_LICENSE_TYPE).toString();
 
-    // Keine Lizenz vorhanden → Dialog benötigt
     if (licenseKey.isEmpty()) {
         qCInfo(licenseLog) << "Keine gespeicherte Lizenz gefunden.";
         return LicenseStatus::NOT_ACTIVATED;
@@ -117,7 +102,6 @@ LicenseStatus LicenseManager::checkLicense()
 
     const QString fingerprint = generateFingerprint();
 
-    // Lizenzschlüssel gegen Keygen.sh validieren (inkl. Fingerabdruck-Scope)
     bool isValid = false;
     QString validationCode;
     const QString licenseId = validateLicenseKey(licenseKey, fingerprint, isValid, validationCode);
@@ -127,10 +111,7 @@ LicenseStatus LicenseManager::checkLicense()
                        << "code=" << validationCode
                        << "type=" << licenseType;
 
-    // --- Ergebnis auswerten ---
-
     if (isValid) {
-        // Lizenz gültig → nach Typ unterscheiden
         if (licenseType == QLatin1String("trial")) {
             const int daysLeft = trialDaysRemaining();
             if (daysLeft > 0) {
@@ -144,8 +125,6 @@ LicenseStatus LicenseManager::checkLicense()
         return LicenseStatus::VALID;
     }
 
-    // Validierungscodes von Keygen.sh auswerten:
-    // https://keygen.sh/docs/api/licenses/#licenses-actions-validate-key
     if (validationCode == QLatin1String("EXPIRED")) {
         if (licenseType == QLatin1String("trial")) {
             return LicenseStatus::TRIAL_EXPIRED;
@@ -156,20 +135,15 @@ LicenseStatus LicenseManager::checkLicense()
     if (validationCode == QLatin1String("NO_MACHINES")
      || validationCode == QLatin1String("NO_MACHINE")
      || validationCode == QLatin1String("FINGERPRINT_SCOPE_MISMATCH")) {
-        // Lizenz existiert, aber diese Maschine ist nicht aktiviert
         return LicenseStatus::NOT_ACTIVATED;
     }
 
-    // Alle anderen Fälle (SUSPENDED, BANNED, NOT_FOUND, Netzwerkfehler)
     m_lastError = validationCode;
     return LicenseStatus::ERROR;
 }
 
 // ---------------------------------------------------------------------------
 // activateCommercialLicense()
-// 1. Validiert den eingegebenen Lizenzschlüssel → holt Lizenz-ID
-// 2. Aktiviert diese Maschine (POST /machines) mit dem Lizenzschlüssel als Auth
-// Gibt true zurück bei Erfolg.
 // ---------------------------------------------------------------------------
 bool LicenseManager::activateCommercialLicense(const QString& licenseKey)
 {
@@ -177,12 +151,10 @@ bool LicenseManager::activateCommercialLicense(const QString& licenseKey)
 
     const QString fingerprint = generateFingerprint();
 
-    // --- Schritt 1: Lizenzschlüssel validieren und ID ermitteln ---
     bool isValid = false;
     QString validationCode;
     const QString licenseId = validateLicenseKey(licenseKey, fingerprint, isValid, validationCode);
 
-    // Bereits auf dieser Maschine aktiviert → als Erfolg werten
     if (isValid) {
         qCInfo(licenseLog) << "Lizenz bereits auf dieser Maschine aktiviert.";
         QSettings settings;
@@ -192,7 +164,6 @@ bool LicenseManager::activateCommercialLicense(const QString& licenseKey)
         return true;
     }
 
-    // Lizenz muss existieren — andere Fehler ablehnen
     if (licenseId.isEmpty() && validationCode != QLatin1String("NO_MACHINES")
                              && validationCode != QLatin1String("NO_MACHINE")
                              && validationCode != QLatin1String("FINGERPRINT_SCOPE_MISMATCH")) {
@@ -201,16 +172,11 @@ bool LicenseManager::activateCommercialLicense(const QString& licenseKey)
         return false;
     }
 
-    // Lizenz-ID ohne vorherige Validierung holen (falls validationCode passt)
-    // licenseId kann leer sein falls NOT_FOUND → Abbruch
     if (licenseId.isEmpty()) {
         m_lastError = tr("Lizenz nicht gefunden.");
         return false;
     }
 
-    // --- Schritt 2: Maschine aktivieren ---
-    // Authentifizierung: "License <key>" erlaubt Client-seitige Aktivierung
-    // (kein Product Token nötig, wenn die Policy dies erlaubt)
     const QString authToken = QStringLiteral("License ") + licenseKey;
 
     QJsonObject machineAttrs;
@@ -237,11 +203,9 @@ bool LicenseManager::activateCommercialLicense(const QString& licenseKey)
     payload[QLatin1String("data")] = data;
 
     int httpStatus = 0;
-    const QString endpoint = QStringLiteral("/machines");
-    const QJsonDocument response = postJson(endpoint, payload, authToken, httpStatus);
+    const QJsonDocument response = postJson("/machines", payload, authToken, httpStatus);
 
     if (httpStatus == 201) {
-        // Maschine erfolgreich aktiviert
         qCInfo(licenseLog) << "Maschine erfolgreich aktiviert. HTTP 201.";
         QSettings settings;
         settings.setValue(KeygenConfig::SETTINGS_LICENSE_KEY,  licenseKey);
@@ -251,7 +215,6 @@ bool LicenseManager::activateCommercialLicense(const QString& licenseKey)
     }
 
     if (httpStatus == 422) {
-        // Maschine bereits aktiviert (Duplikat) — kein echter Fehler
         const QJsonArray errors = response.object()
                                           .value(QLatin1String("errors"))
                                           .toArray();
@@ -281,13 +244,11 @@ bool LicenseManager::activateCommercialLicense(const QString& licenseKey)
 
 // ---------------------------------------------------------------------------
 // startTrial()
-// Erstellt eine neue Trial-Lizenz über die Keygen.sh API und aktiviert sofort
-// diese Maschine. Erfordert den KEYGEN_PRODUCT_TOKEN (sollte serverseitig
-// abgewickelt werden — hier zur Vollständigkeit direkt implementiert).
 // ---------------------------------------------------------------------------
 bool LicenseManager::startTrial()
 {
     qCInfo(licenseLog) << "Starte Trial-Lizenz-Erstellung...";
+    qCInfo(licenseLog) << "Product Token Länge:" << strlen(KeygenConfig::KEYGEN_PRODUCT_TOKEN);
 
     const QString fingerprint = generateFingerprint();
     const QString authToken   = QStringLiteral("Bearer ")
@@ -304,7 +265,6 @@ bool LicenseManager::startTrial()
     QJsonObject relationships;
     relationships[QLatin1String("policy")] = policyRel;
 
-    // Optionale Metadaten: Fingerabdruck für spätere Zuordnung speichern
     QJsonObject metadata;
     metadata[QLatin1String("initialFingerprint")] = fingerprint;
 
@@ -327,6 +287,8 @@ bool LicenseManager::startTrial()
         httpStatus
     );
 
+    qCInfo(licenseLog) << "Trial POST /licenses HTTP Status:" << httpStatus;
+
     if (httpStatus != 201) {
         const QJsonArray errors = licenseResponse.object()
                                                  .value(QLatin1String("errors"))
@@ -343,7 +305,6 @@ bool LicenseManager::startTrial()
         return false;
     }
 
-    // Lizenzschlüssel und ID aus der Antwort extrahieren
     const QJsonObject licenseData   = licenseResponse.object()
                                                      .value(QLatin1String("data"))
                                                      .toObject();
@@ -356,7 +317,6 @@ bool LicenseManager::startTrial()
                        << "Ablauf:" << expiryStr;
 
     // --- Schritt 2: Diese Maschine für die Trial-Lizenz aktivieren ---
-    // Für Trial-Aktivierung den Lizenzschlüssel als Auth verwenden
     const QString licenseAuth = QStringLiteral("License ") + licenseKey;
 
     QJsonObject machineAttrs;
@@ -390,16 +350,16 @@ bool LicenseManager::startTrial()
         machineHttpStatus
     );
 
+    qCInfo(licenseLog) << "Trial POST /machines HTTP Status:" << machineHttpStatus;
+
     if (machineHttpStatus != 201 && machineHttpStatus != 200) {
         qCWarning(licenseLog) << "Trial-Maschinenaktivierung fehlgeschlagen. HTTP"
                               << machineHttpStatus;
         m_lastError = tr("Trial-Aktivierung der Maschine fehlgeschlagen (HTTP %1)")
                       .arg(machineHttpStatus);
-        // Hinweis: Lizenz wurde erstellt, Aktivierung schlug fehl → ggf. aufräumen
         return false;
     }
 
-    // Alle Daten lokal speichern
     QSettings settings;
     settings.setValue(KeygenConfig::SETTINGS_LICENSE_KEY,   licenseKey);
     settings.setValue(KeygenConfig::SETTINGS_LICENSE_ID,    licenseId);
@@ -412,7 +372,6 @@ bool LicenseManager::startTrial()
 
 // ---------------------------------------------------------------------------
 // trialDaysRemaining()
-// Berechnet die verbleibenden Trial-Tage aus dem gespeicherten Ablaufdatum.
 // ---------------------------------------------------------------------------
 int LicenseManager::trialDaysRemaining()
 {
@@ -430,16 +389,12 @@ int LicenseManager::trialDaysRemaining()
         return 0;
     }
 
-    // Auf ganze Tage abrunden
     const qint64 secsLeft = now.secsTo(expiry);
     return static_cast<int>(secsLeft / 86400);
 }
 
 // ---------------------------------------------------------------------------
 // validateOnStartup()
-// Wird beim App-Start aufgerufen. Prüft den Lizenzstatus und emittiert
-// licenseDialogRequired() falls eine Benutzeraktion nötig ist.
-// Gibt true zurück wenn die App gestartet werden darf.
 // ---------------------------------------------------------------------------
 bool LicenseManager::validateOnStartup()
 {
@@ -455,7 +410,6 @@ bool LicenseManager::validateOnStartup()
     case LicenseStatus::TRIAL_ACTIVE: {
         const int daysLeft = trialDaysRemaining();
         qCInfo(licenseLog) << "Trial aktiv." << daysLeft << "Tage verbleibend.";
-        // App darf starten; UI kann Warnung anzeigen
         return true;
     }
 
@@ -478,7 +432,6 @@ bool LicenseManager::validateOnStartup()
     default:
         qCWarning(licenseLog) << "Lizenzfehler:" << m_lastError
                               << "— App wird trotzdem gestartet (Netzwerkfehler toleriert).";
-        // Bei Netzwerkfehlern App nicht blockieren (Offline-Toleranz)
         return true;
     }
 }
@@ -488,8 +441,9 @@ bool LicenseManager::validateOnStartup()
 // ===========================================================================
 
 // ---------------------------------------------------------------------------
-// postJson() — Synchroner HTTP POST mit JSON-Body
-// Baut die vollständige URL auf: KEYGEN_API_BASE + ACCOUNT_ID + endpoint
+// postJson() — Blockierender HTTP POST
+// Verwendet QNetworkReply::waitForReadyRead() statt verschachteltem QEventLoop.
+// Funktioniert zuverlässig auch wenn aus einem QDialog heraus aufgerufen.
 // ---------------------------------------------------------------------------
 QJsonDocument LicenseManager::postJson(const QString& endpoint,
                                        const QJsonObject& payload,
@@ -500,27 +454,41 @@ QJsonDocument LicenseManager::postJson(const QString& endpoint,
                       + QLatin1String(KeygenConfig::KEYGEN_ACCOUNT_ID)
                       + endpoint;
 
+    qCDebug(licenseLog) << "POST" << url;
+
     QNetworkRequest request{QUrl{url}};
     request.setHeader(QNetworkRequest::ContentTypeHeader,
                       QLatin1String("application/vnd.api+json"));
-    request.setRawHeader("Accept",        "application/vnd.api+json");
-    request.setRawHeader("Authorization", authToken.toUtf8());
-    request.setRawHeader("Keygen-Version","1.5"); // Immer aktuelle API-Version anfordern
+    request.setRawHeader("Accept",         "application/vnd.api+json");
+    request.setRawHeader("Keygen-Version", "1.5");
+    if (!authToken.isEmpty()) {
+        request.setRawHeader("Authorization", authToken.toUtf8());
+    }
 
     const QByteArray body = QJsonDocument(payload).toJson(QJsonDocument::Compact);
 
-    // Synchron über QEventLoop warten
+    // Eigener QNetworkAccessManager pro Request — vermeidet Probleme mit
+    // verschachtelten Event-Loops wenn aus einem modalen Dialog aufgerufen.
+    QNetworkAccessManager nam;
+    QNetworkReply* reply = nam.post(request, body);
+
+    // Synchron warten mit eigenem QEventLoop — aber auf dem Stack des Callers,
+    // nicht verschachtelt in einem bestehenden Loop.
     QEventLoop loop;
-    QNetworkReply* reply = m_networkManager->post(request, body);
+    QTimer timeoutTimer;
+    timeoutTimer.setSingleShot(true);
+    timeoutTimer.setInterval(20000); // 20 Sekunden Timeout
 
-    connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
-
-    // Timeout nach 15 Sekunden um Deadlock zu vermeiden
-    QTimer::singleShot(15000, &loop, &QEventLoop::quit);
+    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    QObject::connect(&timeoutTimer, &QTimer::timeout, &loop, &QEventLoop::quit);
+    timeoutTimer.start();
     loop.exec();
+
+    timeoutTimer.stop();
 
     if (reply->error() != QNetworkReply::NoError) {
         qCWarning(licenseLog) << "Netzwerkfehler (POST" << endpoint << "):"
+                              << reply->error()
                               << reply->errorString();
         m_lastError = reply->errorString();
         httpStatus  = -1;
@@ -531,6 +499,8 @@ QJsonDocument LicenseManager::postJson(const QString& endpoint,
     httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
     const QByteArray responseData = reply->readAll();
     reply->deleteLater();
+
+    qCDebug(licenseLog) << "HTTP" << httpStatus << "Response:" << responseData.left(200);
 
     QJsonParseError parseError;
     const QJsonDocument doc = QJsonDocument::fromJson(responseData, &parseError);
@@ -543,7 +513,7 @@ QJsonDocument LicenseManager::postJson(const QString& endpoint,
 }
 
 // ---------------------------------------------------------------------------
-// getJson() — Synchroner HTTP GET
+// getJson() — Blockierender HTTP GET
 // ---------------------------------------------------------------------------
 QJsonDocument LicenseManager::getJson(const QString& endpoint,
                                       const QString& authToken,
@@ -554,16 +524,26 @@ QJsonDocument LicenseManager::getJson(const QString& endpoint,
                       + endpoint;
 
     QNetworkRequest request{QUrl{url}};
-    request.setRawHeader("Accept",        "application/vnd.api+json");
-    request.setRawHeader("Authorization", authToken.toUtf8());
-    request.setRawHeader("Keygen-Version","1.5");
+    request.setRawHeader("Accept",         "application/vnd.api+json");
+    request.setRawHeader("Keygen-Version", "1.5");
+    if (!authToken.isEmpty()) {
+        request.setRawHeader("Authorization", authToken.toUtf8());
+    }
+
+    QNetworkAccessManager nam;
+    QNetworkReply* reply = nam.get(request);
 
     QEventLoop loop;
-    QNetworkReply* reply = m_networkManager->get(request);
+    QTimer timeoutTimer;
+    timeoutTimer.setSingleShot(true);
+    timeoutTimer.setInterval(20000);
 
-    connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
-    QTimer::singleShot(15000, &loop, &QEventLoop::quit);
+    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    QObject::connect(&timeoutTimer, &QTimer::timeout, &loop, &QEventLoop::quit);
+    timeoutTimer.start();
     loop.exec();
+
+    timeoutTimer.stop();
 
     if (reply->error() != QNetworkReply::NoError) {
         qCWarning(licenseLog) << "Netzwerkfehler (GET" << endpoint << "):"
@@ -584,8 +564,6 @@ QJsonDocument LicenseManager::getJson(const QString& endpoint,
 
 // ---------------------------------------------------------------------------
 // validateLicenseKey()
-// Sendet POST /licenses/actions/validate-key mit Fingerabdruck-Scope.
-// Gibt die Lizenz-ID zurück; isValid und validationCode werden gesetzt.
 // ---------------------------------------------------------------------------
 QString LicenseManager::validateLicenseKey(const QString& licenseKey,
                                             const QString& fingerprint,
@@ -595,7 +573,6 @@ QString LicenseManager::validateLicenseKey(const QString& licenseKey,
     isValid        = false;
     validationCode = QString();
 
-    // Scope auf Fingerabdruck einschränken für node-locked Validierung
     QJsonObject scopeObj;
     scopeObj[QLatin1String("fingerprint")] = fingerprint;
 
@@ -606,12 +583,11 @@ QString LicenseManager::validateLicenseKey(const QString& licenseKey,
     QJsonObject payload;
     payload[QLatin1String("meta")] = meta;
 
-    // validate-key benötigt keine Authentifizierung (public endpoint)
     int httpStatus = 0;
     const QJsonDocument response = postJson(
         QStringLiteral("/licenses/actions/validate-key"),
         payload,
-        QString(), // Kein Auth-Token erforderlich
+        QString(),
         httpStatus
     );
 
@@ -627,7 +603,6 @@ QString LicenseManager::validateLicenseKey(const QString& licenseKey,
     isValid        = metaResp.value(QLatin1String("valid")).toBool(false);
     validationCode = metaResp.value(QLatin1String("code")).toString();
 
-    // Lizenz-ID aus den Dateobjekt extrahieren
     const QString licenseId = dataObj.value(QLatin1String("id")).toString();
 
     qCDebug(licenseLog) << "validate-key Antwort:"

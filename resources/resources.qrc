@@ -1,5 +1,6 @@
 <RCC>
     <qresource prefix="/images">
         <file>logo_notavis.svg</file>
+            <file>icon_biegewinkel.ico</file>
     </qresource>
 </RCC>

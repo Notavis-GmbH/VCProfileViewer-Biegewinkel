@@ -2,6 +2,7 @@
 ** main.cpp
 ****************************************************************************/
 #include <QApplication>
+#include <QIcon>
 #include <QStyleFactory>
 #include <QDir>
 #include <QFile>
@@ -69,6 +70,7 @@ int main(int argc, char *argv[])
     app.setApplicationName("VC3DProfileViewer_Biegewinkel");
     app.setApplicationVersion("1.0.0");
     app.setOrganizationName("NOTAVIS");
+    app.setWindowIcon(QIcon(":/images/icon_biegewinkel.ico"));
 
     // ── Open application log ──────────────────────────────────────────────
     {

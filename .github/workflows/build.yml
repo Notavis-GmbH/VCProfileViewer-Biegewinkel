@@ -16,6 +16,9 @@ jobs:
     name: Build & Package (Windows x64)
     runs-on: windows-2022
 
+    env:
+      KEYGEN_PRODUCT_TOKEN: ${{ secrets.KEYGEN_PRODUCT_TOKEN }}
+
     steps:
     # ── 1. Code auschecken ────────────────────────────────────────────────────
     - name: Checkout repository
@@ -63,7 +66,13 @@ jobs:
       run: |
         $ts = Get-Date -Format "yyyy-MM-dd-HHmm"
         Write-Host "Build timestamp: $ts"
-        cmake -B build -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=Release "-DCMAKE_PREFIX_PATH=C:\Qt\6.8.1\msvc2022_64" "-DBUILD_TIMESTAMP=$ts" "-DKEYGEN_PRODUCT_TOKEN=${{ secrets.KEYGEN_PRODUCT_TOKEN }}"
+        # Token aus Env-Variable lesen (kein direktes ${{ }} in cmake-Argument)
+        $token = $env:KEYGEN_PRODUCT_TOKEN
+        Write-Host "Token length: $($token.Length)"
+        cmake -B build -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=Release `
+          "-DCMAKE_PREFIX_PATH=C:\Qt\6.8.1\msvc2022_64" `
+          "-DBUILD_TIMESTAMP=$ts" `
+          "-DKEYGEN_PRODUCT_TOKEN=$token"
 
     # ── 7. Bauen ──────────────────────────────────────────────────────────────
     - name: Build
@@ -160,3 +169,4 @@ jobs:
         draft:       false
         prerelease:  false
         make_latest: true
+        overwrite_files: true

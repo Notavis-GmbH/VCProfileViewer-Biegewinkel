@@ -10,6 +10,10 @@
 #include <QMutex>
 #include <QtGlobal>
 #include "mainwindow.h"
+#include "licensemanager.h"
+#include "licensedialog.h"
+#include "licensemanager.h"
+#include "licensedialog.h"
 
 // ──────────────────────────────────────────────────────────────────────────────
 //  Application-level message handler – writes qDebug/qWarning/qCritical
@@ -115,6 +119,16 @@ int main(int argc, char *argv[])
         "QLabel { color: #ddd; } "
         "QStatusBar { background: #222; color: #888; }"
     );
+
+    // ── Lizenzprüfung ──────────────────────────────────────────────────
+    LicenseManager licenseManager;
+    LicenseStatus status = licenseManager.validateOnStartup();
+    if (status == LicenseStatus::NOT_ACTIVATED || status == LicenseStatus::ERROR) {
+        LicenseDialog dlg(&licenseManager);
+        if (dlg.exec() != QDialog::Accepted) {
+            return 0; // Kein Lizenzschlüssel eingegeben — App beenden
+        }
+    }
 
     MainWindow w;
     w.show();

@@ -36,6 +36,8 @@ set(SOURCES
     src/vcprotocol.cpp
     src/jsonplayer.cpp
     src/measurementlogger.cpp   # CSV measurement log
+    src/licensemanager.cpp
+    src/licensedialog.cpp
 )
 
 set(HEADERS
@@ -46,6 +48,9 @@ set(HEADERS
     include/vcprotocol.h
     include/jsonplayer.h
     include/measurementlogger.h   # CSV measurement log
+    include/licensemanager.h
+    include/licensedialog.h
+    include/keygen_config.h
 )
 
 # ── Executable ────────────────────────────────────────────────────────────────

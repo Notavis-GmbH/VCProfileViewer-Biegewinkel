@@ -8,6 +8,32 @@ endif()
 message(STATUS "Build timestamp: ${BUILD_TIMESTAMP}")
 add_compile_definitions(BUILD_TIMESTAMP="${BUILD_TIMESTAMP}")
 
+
+# ── Keygen.sh Lizenz-Konfiguration ───────────────────────────────────────────
+# Werte kommen aus CMake-Variablen (lokal) oder GitHub Actions Secrets (CI)
+# Fallback auf leere Strings wenn nicht gesetzt (Demo-Build ohne Lizenz)
+if(NOT DEFINED KEYGEN_ACCOUNT_ID)
+    set(KEYGEN_ACCOUNT_ID          "aa7134fd-36e5-43da-be3d-3d92982aff42")
+endif()
+if(NOT DEFINED KEYGEN_PRODUCT_TOKEN)
+    set(KEYGEN_PRODUCT_TOKEN       "")
+endif()
+if(NOT DEFINED KEYGEN_COMMERCIAL_POLICY_ID)
+    set(KEYGEN_COMMERCIAL_POLICY_ID "6a941108-33b3-4a7d-8902-0de4db94b697")
+endif()
+if(NOT DEFINED KEYGEN_TRIAL_POLICY_ID)
+    set(KEYGEN_TRIAL_POLICY_ID     "1d6c8b85-444d-4db8-b577-4a6ffec682c2")
+endif()
+if(NOT DEFINED KEYGEN_PRODUCT_ID)
+    set(KEYGEN_PRODUCT_ID          "c02b35c1-880b-4523-85a0-4e6c41cbef75")
+endif()
+
+configure_file(
+    "${CMAKE_SOURCE_DIR}/include/keygen_config.h.in"
+    "${CMAKE_BINARY_DIR}/include/keygen_config.h"
+    @ONLY
+)
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
@@ -50,7 +76,6 @@ set(HEADERS
     include/measurementlogger.h   # CSV measurement log
     include/licensemanager.h
     include/licensedialog.h
-    include/keygen_config.h
 )
 
 # ── Executable ────────────────────────────────────────────────────────────────
@@ -60,7 +85,7 @@ else()
     add_executable(VC3DProfileViewer ${SOURCES} ${HEADERS})
 endif()
 
-target_include_directories(VC3DProfileViewer PRIVATE include)
+target_include_directories(VC3DProfileViewer PRIVATE include "${CMAKE_BINARY_DIR}/include")
 target_link_libraries(VC3DProfileViewer PRIVATE ${QT_TARGET})
 
 # ── Embed resources (logo SVG) via QRC ───────────────────────────────────────

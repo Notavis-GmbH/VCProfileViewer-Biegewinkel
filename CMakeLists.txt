@@ -90,6 +90,10 @@ endif()
 if(WIN32)
     set(APP_RC "${CMAKE_SOURCE_DIR}/resources/app.rc")
     target_sources(VC3DProfileViewer PRIVATE ${APP_RC})
+    # RC-Compiler muss resources/ als Include-Pfad kennen
+    set_source_files_properties(${APP_RC} PROPERTIES
+        COMPILE_FLAGS "/I "${CMAKE_SOURCE_DIR}/resources""
+    )
 endif()
 target_include_directories(VC3DProfileViewer PRIVATE include "${CMAKE_BINARY_DIR}/include")
 target_link_libraries(VC3DProfileViewer PRIVATE ${QT_TARGET})

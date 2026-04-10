@@ -130,7 +130,7 @@ jobs:
         $ts  = Get-Date -Format "yyyy-MM-dd-HHmm"
         $sha = "${{ github.sha }}".Substring(0,7)
         Compress-Archive -Path "VC3DProfileViewer_portable\*" `
-          -DestinationPath "VC3DProfileViewer_v2.2-${ts}-${sha}.zip" -Force
+          -DestinationPath "VCProfileViewer_Biegewinkel_v2.2-${ts}-${sha}.zip" -Force
 
     - name: Create GitHub Release
       if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -155,7 +155,7 @@ jobs:
 
           ### Änderungen
           Siehe [Commit-History](https://github.com/${{ github.repository }}/commits/main)
-        files: VC3DProfileViewer_v2.2-*.zip
+        files: VCProfileViewer_Biegewinkel_v2.2-*.zip
         draft:       false
         prerelease:  false
         make_latest: true

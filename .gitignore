@@ -41,3 +41,6 @@ Data/
 # OS
 .DS_Store
 Thumbs.db
+
+# Keygen.sh Konfiguration — niemals committen (enthält sensitive Tokens)
+keygen_config.h

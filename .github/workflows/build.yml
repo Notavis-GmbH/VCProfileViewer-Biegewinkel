@@ -126,9 +126,10 @@ jobs:
       if: github.event_name == 'push' && github.ref == 'refs/heads/main'
       shell: pwsh
       run: |
+        $ts  = Get-Date -Format "yyyy-MM-dd-HHmm"
         $sha = "${{ github.sha }}".Substring(0,7)
         Compress-Archive -Path "VC3DProfileViewer_portable\*" `
-          -DestinationPath "VC3DProfileViewer_v2.2_${sha}.zip" -Force
+          -DestinationPath "VC3DProfileViewer_v2.2-${ts}-${sha}.zip" -Force
 
     - name: Create GitHub Release
       if: github.event_name == 'push' && github.ref == 'refs/heads/main'

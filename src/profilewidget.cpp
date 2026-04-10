@@ -504,21 +504,24 @@ void ProfileChartView::drawDocOverlay(QPainter &painter)
         painter.setFont(titleFont);
         painter.setPen(QColor(0, 200, 255));
         painter.drawText(QRect(x + logoW + 8, y, w - logoW - 8, titleLineH),
-                         Qt::AlignLeft | Qt::AlignVCenter,
+                         static_cast<int>(Qt::AlignLeft | Qt::AlignVCenter),
                          "VC 3D Profile Viewer  –  Hilfe");
 
         // Version bottom-right of title row
+        y += qMax(titleLineH, logoH) + 2;
+
 #ifndef BUILD_TIMESTAMP
 #  define BUILD_TIMESTAMP "dev"
 #endif
-        QFont vf = painter.font(); vf.setPointSize(8); vf.setBold(false);
+        // Versionszeile – eigene Zeile unter dem Titel
+        QFont vf = bodyFont; vf.setPointSize(8); vf.setBold(false);
         painter.setFont(vf);
         painter.setPen(QColor(120, 120, 150));
-        painter.drawText(QRect(x, y, w, titleLineH),
-                         Qt::AlignRight | Qt::AlignVCenter,
+        painter.drawText(QRect(x, y, w, versionLineH),
+                         static_cast<int>(Qt::AlignRight | Qt::AlignVCenter),
                          QString("v2.2-%1").arg(BUILD_TIMESTAMP));
 
-        y += qMax(titleLineH, logoH) + 4;
+        y += versionLineH + 2;
     }
     painter.setPen(QColor(70, 70, 100));
     painter.drawLine(x, y, x + w, y);

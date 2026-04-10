@@ -1652,7 +1652,10 @@ void MainWindow::applyPreset(const QString &name)
     // Store the source mode from preset but DON'T auto-switch or auto-start.
     // User stays in their current mode until they manually switch.
     const int presetMode = ps.value("Source_Mode", 0).toInt();
-    // Only update the folder path (for reference), not the active mode
+    Q_UNUSED(presetMode)
+    // Quadrant aus Preset laden
+    int quad = ps.value("Angle_Quadrant", static_cast<int>(AngleQuadrant::BottomLeft)).toInt();
+    onQuadrantSelected(static_cast<AngleQuadrant>(quad));
     const QString logPath = ps.value("Log_Path", "").toString();
     if (!logPath.isEmpty()) m_editLogPath->setText(logPath);
     ps.endGroup();
@@ -1793,10 +1796,11 @@ void MainWindow::saveSettings()
     s.setValue("ROI2/End",       m_roi2End->value());
     s.setValue("ROI1/Method",    m_roi1Method->currentIndex());
     s.setValue("ROI2/Method",    m_roi2Method->currentIndex());
-    s.setValue("Playback/Folder",m_editFolder->text());
-    s.setValue("Playback/Speed", m_speedSlider->value());
-    s.setValue("Source/Mode",    static_cast<int>(m_sourceMode));
-    s.setValue("Log/Path",       m_editLogPath->text());
+    s.setValue("Playback/Folder",  m_editFolder->text());
+    s.setValue("Playback/Speed",   m_speedSlider->value());
+    s.setValue("Source/Mode",      static_cast<int>(m_sourceMode));
+    s.setValue("Log/Path",         m_editLogPath->text());
+    s.setValue("Angle/Quadrant",   static_cast<int>(m_angleQuadrant));
 }
 
 void MainWindow::loadSettings()
@@ -1839,6 +1843,10 @@ void MainWindow::loadSettings()
         m_sourceMode = SourceMode::JsonPlayback;
     }
 
+    // Quadrant wiederherstellen (default: BottomLeft)
+    int quad = s.value("Angle/Quadrant", static_cast<int>(AngleQuadrant::BottomLeft)).toInt();
+    onQuadrantSelected(static_cast<AngleQuadrant>(quad));
+
     // Log path
     QString logPath = s.value("Log/Path", "").toString();
     if (logPath.isEmpty()) {
@@ -1859,56 +1867,43 @@ void MainWindow::loadSettings()
                 .arg(QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss"))));
     }
 
-    // Seed presets (TestTyp_1 + TestTyp_1_Sub)
+    // Seed presets – nur TestTyp_1 (TestTyp_1_Sub entfernt)
     {
         QSettings ps(presetsPath(), QSettings::IniFormat);
-        // Remove legacy TestData-Setup if it exists
-        if (ps.childGroups().contains("TestData-Setup"))
-            ps.remove("TestData-Setup");
-        // Seed "TestTyp_1" preset with actual recording settings
-        if (!ps.childGroups().contains("TestTyp_1")) {
+        // Veraltete Preset-Eintraege entfernen
+        for (const QString &legacy : {"TestData-Setup", "TestTyp_1_Sub"})
+            if (ps.childGroups().contains(legacy))
+                ps.remove(legacy);
+        // TestTyp_1 immer aktuell halten (ROI/Methode aus Screenshot)
+        {
             const QString recPath =
                 QDir(QApplication::applicationDirPath()).filePath("TestData");
             ps.beginGroup("TestTyp_1");
             ps.setValue("Sensor_IP",       "192.168.3.15");
             ps.setValue("Sensor_Port",     "1096");
-            ps.setValue("ROI1_Start",      -38.0);
-            ps.setValue("ROI1_End",          0.0);
-            ps.setValue("ROI1_Method",       2);    // Hough
-            ps.setValue("ROI2_Start",        0.0);
-            ps.setValue("ROI2_End",        106.0);
-            ps.setValue("ROI2_Method",       2);    // Hough
+            ps.setValue("ROI1_Start",      -26.0);   // Screenshot
+            ps.setValue("ROI1_End",         -5.0);   // Screenshot
+            ps.setValue("ROI1_Method",        3);    // Auto
+            ps.setValue("ROI2_Start",        21.0);  // Screenshot
+            ps.setValue("ROI2_End",          98.0);  // Screenshot
+            ps.setValue("ROI2_Method",        3);    // Auto
             ps.setValue("Playback_Folder", recPath);
-            ps.setValue("Playback_Speed",    5);    // 1.0x
-            ps.setValue("Source_Mode",       1);    // JSON Wiedergabe
-            ps.setValue("Log_Path",          QString());
-            ps.endGroup();
-        }
-        // Seed "TestTyp_1_Sub" – zeigt auf TestData\Sub1 (Unterordner-Beispiel).
-        // Ordner wird beim ersten Start automatisch geladen (loadFolder-Fix oben).
-        if (!ps.childGroups().contains("TestTyp_1_Sub")) {
-            const QString subPath =
-                QDir(QApplication::applicationDirPath()).filePath("TestData\\Sub1");
-            ps.beginGroup("TestTyp_1_Sub");
-            ps.setValue("Sensor_IP",       "192.168.3.15");
-            ps.setValue("Sensor_Port",     "1096");
-            ps.setValue("ROI1_Start",      -38.0);
-            ps.setValue("ROI1_End",          0.0);
-            ps.setValue("ROI1_Method",       2);    // Hough
-            ps.setValue("ROI2_Start",        0.0);
-            ps.setValue("ROI2_End",        106.0);
-            ps.setValue("ROI2_Method",       2);    // Hough
-            ps.setValue("Playback_Folder", subPath);
-            ps.setValue("Playback_Speed",    5);    // 1.0x
-            ps.setValue("Source_Mode",       1);    // JSON Wiedergabe
-            ps.setValue("Log_Path",          QString());
+            ps.setValue("Playback_Speed",     5);    // 2.0 Hz
+            ps.setValue("Source_Mode",        1);    // JSON Wiedergabe
+            ps.setValue("Angle_Quadrant",     2);    // BottomLeft
+            ps.setValue("Log_Path",           QString());
             ps.endGroup();
         }
         ps.sync();
     }
 
-    // Populate preset combo
+    // Preset-Combo befüllen, dann TestTyp_1 sofort als Startzustand laden
     refreshPresetCombo();
+    applyPreset("TestTyp_1");
+    // Quelle direkt auf JSON Wiedergabe stellen
+    m_rbPlayback->setChecked(true);
+    m_sourceMode = SourceMode::JsonPlayback;
+    applySourceMode();
 }
 
 void MainWindow::onQuadrantSelected(AngleQuadrant q)

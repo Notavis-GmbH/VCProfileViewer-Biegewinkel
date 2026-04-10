@@ -122,8 +122,8 @@ int main(int argc, char *argv[])
 
     // ── Lizenzprüfung ──────────────────────────────────────────────────
     LicenseManager licenseManager;
-    LicenseStatus status = licenseManager.validateOnStartup();
-    if (status == LicenseStatus::NOT_ACTIVATED || status == LicenseStatus::ERROR) {
+    bool licenseOk = licenseManager.validateOnStartup();
+    if (!licenseOk) {
         LicenseDialog dlg(&licenseManager);
         if (dlg.exec() != QDialog::Accepted) {
             return 0; // Kein Lizenzschlüssel eingegeben — App beenden

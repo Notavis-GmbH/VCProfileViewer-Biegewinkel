@@ -98,8 +98,7 @@ jobs:
         New-Item -ItemType Directory "$pkg"           -Force | Out-Null
         New-Item -ItemType Directory "$pkg\Data"      -Force | Out-Null
         New-Item -ItemType Directory "$pkg\Devices"   -Force | Out-Null
-        New-Item -ItemType Directory "$pkg\TestData"      -Force | Out-Null
-        New-Item -ItemType Directory "$pkg\TestData\Sub1"  -Force | Out-Null
+        New-Item -ItemType Directory "$pkg\TestData"  -Force | Out-Null
         Copy-Item -Path "${{ env.EXE_DIR }}\*" -Destination $pkg -Recurse -Force
         # Bundle the 20 test profiles (already copied by CMake POST_BUILD into EXE_DIR/TestData)
         # Copy them again here in case they ended up inside EXE_DIR subtree
@@ -109,8 +108,6 @@ jobs:
         } else {
             Copy-Item -Path "tests\data\*" -Destination "$pkg\TestData" -Force
         }
-        # Sub1: identische Profile als Unterordner-Beispiel für TestTyp_1_Sub
-        Copy-Item -Path "tests\data\*" -Destination "$pkg\TestData\Sub1" -Force
         if (Test-Path README.md)  { Copy-Item README.md  $pkg -Force }
         if (Test-Path README.txt) { Copy-Item README.txt $pkg -Force }
         # Copy SVG resources for watermark

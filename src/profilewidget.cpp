@@ -2,6 +2,9 @@
 ** profilewidget.cpp
 ****************************************************************************/
 #include "profilewidget.h"
+#include "licensemanager.h"
+#include "keygen_config.h"
+#include <QSettings>
 #include <QtSvg/QSvgRenderer>
 #include <QPainter>
 #include <QPainterPath>
@@ -447,7 +450,7 @@ void ProfileChartView::drawDocOverlay(QPainter &painter)
     const int closeHintH   = bodyLineH + 8;
     const int paddingV     = 20;  // top + bottom padding
     const int paddingH     = 20;  // left + right padding
-    const int panelW       = 580;
+    const int panelW       = 640;
     const int keyW         = 150;
 
     // Count total height
@@ -460,6 +463,8 @@ void ProfileChartView::drawDocOverlay(QPainter &painter)
     contentH += sectionGap + sectionLineH + 5 * bodyLineH;
     // Visualisierung: 1 section + 4 rows
     contentH += sectionGap + sectionLineH + 4 * bodyLineH;
+    // Lizenz: 1 section + 3 rows + Reset-Hinweis
+    contentH += sectionGap + sectionLineH + 3 * bodyLineH + bodyLineH;
     contentH += closeHintH;
     const int panelH = contentH + paddingV * 2;
 
@@ -472,7 +477,7 @@ void ProfileChartView::drawDocOverlay(QPainter &painter)
     int availW = static_cast<int>(pa.width())  - 40;
     QRect overlay(ox, oy,
                   std::min(panelW, availW),
-                  std::min(panelH, availH));
+                  panelH);
 
     // ── Background ───────────────────────────────────────────────────────────
     painter.setPen(Qt::NoPen);
@@ -580,6 +585,59 @@ void ProfileChartView::drawDocOverlay(QPainter &painter)
     row("Orange Linie",  "Erkannte Gerade ROI 2 (inkl. φ und RMS)");
     row("Heatmap",       "Residuen je Messpunkt: grün=klein → rot=groß");
     row("Info-Panel",    "Zusammenfassung oben rechts im Chart");
+
+    // ─── Lizenz ──────────────────────────────────────────────────────────────
+    {
+        QSettings lic;
+        const QString licType  = lic.value(KeygenConfig::SETTINGS_LICENSE_TYPE).toString();
+        const QString licKey   = lic.value(KeygenConfig::SETTINGS_LICENSE_KEY).toString();
+
+        section(QStringLiteral("\u25B6 Lizenz"));
+
+        QString typeStr, statusStr;
+        QColor  statusColor = QColor(100, 255, 150);
+
+        if (licType == QLatin1String("trial")) {
+            LicenseManager tmpMgr;
+            const int days = tmpMgr.trialDaysRemaining();
+            typeStr   = QStringLiteral("Testversion (69 Tage)");
+            if (days > 0) {
+                statusStr  = QStringLiteral("Aktiv – noch %1 Tag%2").arg(days).arg(days == 1 ? "" : "e");
+            } else {
+                statusStr  = QStringLiteral("Abgelaufen");
+                statusColor = QColor(255, 100, 100);
+            }
+        } else if (licType == QLatin1String("commercial")) {
+            typeStr   = QStringLiteral("Kommerzielle Lizenz");
+            statusStr = QStringLiteral("Aktiv");
+        } else {
+            typeStr   = QStringLiteral("–");
+            statusStr = QStringLiteral("Nicht aktiviert");
+            statusColor = QColor(255, 180, 50);
+        }
+
+        row("Typ",    typeStr);
+        row("Status", statusStr, statusColor);
+
+        // Schlüssel – nur erste/letzte 4 Zeichen zeigen
+        QString keyDisplay;
+        if (licKey.length() > 8)
+            keyDisplay = licKey.left(4) + QStringLiteral("–…–") + licKey.right(4);
+        else if (!licKey.isEmpty())
+            keyDisplay = licKey;
+        else
+            keyDisplay = QStringLiteral("–");
+        row("Schlüssel", keyDisplay, QColor(160, 160, 160));
+
+        // Reset-Hinweis
+        y += 2;
+        painter.setFont(bodyFont);
+        painter.setPen(QColor(100, 120, 160));
+        painter.drawText(QRect(x + 4, y, w - 8, bodyLineH),
+                         Qt::AlignLeft | Qt::AlignVCenter,
+                         QStringLiteral("Zum Zurücksetzen: Strg+Shift+R"));
+        y += bodyLineH;
+    }
 
     // ─── Close hint ──────────────────────────────────────────────────────────
     y += 4;

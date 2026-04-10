@@ -66,7 +66,7 @@ static void appMessageHandler(QtMsgType type,
 int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
-    app.setApplicationName("VC3DProfileViewer");
+    app.setApplicationName("VC3DProfileViewer_Biegewinkel");
     app.setApplicationVersion("1.0.0");
     app.setOrganizationName("NOTAVIS");
 

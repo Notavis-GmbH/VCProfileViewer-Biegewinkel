@@ -85,6 +85,12 @@ else()
     add_executable(VC3DProfileViewer ${SOURCES} ${HEADERS})
 endif()
 
+
+# ── Windows Application Icon ──────────────────────────────────────────────────
+if(WIN32)
+    set(APP_RC "${CMAKE_SOURCE_DIR}/resources/app.rc")
+    target_sources(VC3DProfileViewer PRIVATE ${APP_RC})
+endif()
 target_include_directories(VC3DProfileViewer PRIVATE include "${CMAKE_BINARY_DIR}/include")
 target_link_libraries(VC3DProfileViewer PRIVATE ${QT_TARGET})
 

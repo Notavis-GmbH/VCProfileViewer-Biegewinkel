@@ -66,7 +66,7 @@ jobs:
       run: |
         $ts = Get-Date -Format "yyyy-MM-dd-HHmm"
         Write-Host "Build timestamp: $ts"
-        # Token aus Env-Variable lesen (kein direktes ${{ }} in cmake-Argument)
+        # Token aus Env-Variable lesen - nicht direkt als cmake-Argument expandieren
         $token = $env:KEYGEN_PRODUCT_TOKEN
         Write-Host "Token length: $($token.Length)"
         cmake -B build -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=Release `
@@ -170,3 +170,4 @@ jobs:
         prerelease:  false
         make_latest: true
         overwrite_files: true
+

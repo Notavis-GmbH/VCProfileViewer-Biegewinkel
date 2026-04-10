@@ -29,6 +29,11 @@
 #include <QFont>
 #include <QFrame>
 #include <QScrollArea>
+#include <QShortcut>
+#include <QKeySequence>
+#include "licensemanager.h"
+#include "licensedialog.h"
+#include "keygen_config.h"
 #include <QStatusBar>
 #include <QSizePolicy>
 #include <cmath>
@@ -449,6 +454,38 @@ MainWindow::MainWindow(QWidget *parent)
     setWindowTitle(QString("VC 3D Profile Viewer  v2.2-%1")
                    .arg(QString(BUILD_TIMESTAMP).replace(" ","-").replace(":","")));
     setMinimumSize(1100, 700);
+
+    // ── Strg+Shift+R: Lizenz zurücksetzen ────────────────────────────────────
+    auto *resetShortcut = new QShortcut(QKeySequence("Ctrl+Shift+R"), this);
+    connect(resetShortcut, &QShortcut::activated, this, [this]() {
+        const auto btn = QMessageBox::question(
+            this,
+            tr("Lizenz zurücksetzen"),
+            tr("Möchtest du die aktuelle Lizenz wirklich entfernen?\n\n"
+               "Die Anwendung wird danach neu gestartet und du musst\n"
+               "einen neuen Lizenzschlüssel eingeben oder eine neue\n"
+               "Testversion starten."),
+            QMessageBox::Yes | QMessageBox::No,
+            QMessageBox::No
+        );
+        if (btn != QMessageBox::Yes) return;
+
+        // Lizenz aus QSettings löschen
+        QSettings settings;
+        settings.remove(KeygenConfig::SETTINGS_LICENSE_KEY);
+        settings.remove(KeygenConfig::SETTINGS_LICENSE_ID);
+        settings.remove(KeygenConfig::SETTINGS_LICENSE_TYPE);
+        settings.remove(KeygenConfig::SETTINGS_TRIAL_EXPIRY);
+        settings.sync();
+
+        // Lizenzdialog zeigen
+        LicenseManager mgr;
+        LicenseDialog dlg(&mgr, this);
+        if (dlg.exec() != QDialog::Accepted) {
+            // Kein gültiger Key → App beenden
+            qApp->quit();
+        }
+    });
 
     // JSON player (no thread needed – all Qt slots, no blocking I/O)
     m_jsonPlayer = new JsonPlayer(this);

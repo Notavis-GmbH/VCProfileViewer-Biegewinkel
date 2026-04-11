@@ -1,0 +1,73 @@
+ENDBENUTZER-LIZENZVERTRAG (EULA)
+VC Profile Viewer Biegewinkel
+NOTAVIS GmbH, Pirmasens, Deutschland
+
+Bitte lesen Sie diesen Endbenutzer-Lizenzvertrag sorgfältig durch, bevor Sie die
+Software verwenden. Mit der Nutzung der Software erklären Sie sich mit den
+nachfolgenden Bedingungen einverstanden.
+
+──────────────────────────────────────────────────────────────────────────────
+§ 1  LIZENZUMFANG
+──────────────────────────────────────────────────────────────────────────────
+Die NOTAVIS GmbH gewährt Ihnen eine nicht-exklusive, nicht übertragbare
+Einzelplatz-Lizenz zur Nutzung der Software „VC Profile Viewer Biegewinkel"
+(nachfolgend „Software") auf einem einzigen Computer. Eine Weitergabe,
+Vermietung, Übertragung oder ein Weiterverkauf der Lizenz an Dritte ist nicht
+gestattet.
+
+──────────────────────────────────────────────────────────────────────────────
+§ 2  TESTVERSION
+──────────────────────────────────────────────────────────────────────────────
+Die Software kann 69 (neunundsechzig) Tage kostenlos getestet werden. Nach
+Ablauf dieser Testphase ist für die weitere Nutzung eine kostenpflichtige Lizenz
+erforderlich, die über die NOTAVIS GmbH bezogen werden kann.
+
+──────────────────────────────────────────────────────────────────────────────
+§ 3  NUTZUNGSBESCHRÄNKUNGEN
+──────────────────────────────────────────────────────────────────────────────
+Es ist Ihnen untersagt:
+  a) die Software zu dekompilieren, zu disassemblieren oder anderweitig einem
+     Reverse Engineering zu unterziehen;
+  b) die Software oder Teile davon zu kopieren, zu modifizieren oder abgeleitete
+     Werke zu erstellen;
+  c) die Software oder Ihren Lizenzschlüssel an Dritte weiterzugeben, zu
+     vermieten oder zu verkaufen;
+  d) Schutzmaßnahmen oder Lizenzprüfmechanismen der Software zu umgehen.
+
+──────────────────────────────────────────────────────────────────────────────
+§ 4  HAFTUNGSAUSSCHLUSS
+──────────────────────────────────────────────────────────────────────────────
+Die Software wird „wie besehen" (as is) ohne jegliche ausdrückliche oder
+stillschweigende Gewährleistung bereitgestellt. Die NOTAVIS GmbH übernimmt
+insbesondere keine Gewährleistung für die Richtigkeit, Vollständigkeit oder
+Eignung der durch die Software ermittelten Messergebnisse für einen bestimmten
+Zweck. Die Haftung der NOTAVIS GmbH ist, soweit gesetzlich zulässig,
+ausgeschlossen. Dies gilt insbesondere für mittelbare Schäden, entgangenen
+Gewinn oder Datenverlust.
+
+──────────────────────────────────────────────────────────────────────────────
+§ 5  DATENSCHUTZ
+──────────────────────────────────────────────────────────────────────────────
+Bei der Aktivierung einer Lizenz wird eine anonymisierte Maschinen-ID an den
+Lizenzserver (api.keygen.sh) der NOTAVIS GmbH übertragen. Es werden keine
+personenbezogenen Daten gespeichert oder weitergegeben. Die Verarbeitung erfolgt
+ausschließlich zur Verwaltung der Lizenzaktivierung.
+
+──────────────────────────────────────────────────────────────────────────────
+§ 6  KÜNDIGUNG UND LIZENZENTZUG
+──────────────────────────────────────────────────────────────────────────────
+Diese Lizenz gilt auf unbestimmte Zeit. Sie erlischt automatisch und ohne
+Vorankündigung, wenn Sie gegen eine der Bedingungen dieses Vertrages verstoßen.
+Im Falle der Beendigung sind Sie verpflichtet, alle Kopien der Software
+unverzüglich zu löschen.
+
+──────────────────────────────────────────────────────────────────────────────
+§ 7  ANWENDBARES RECHT UND GERICHTSSTAND
+──────────────────────────────────────────────────────────────────────────────
+Dieser Vertrag unterliegt dem Recht der Bundesrepublik Deutschland unter
+Ausschluss des UN-Kaufrechts (CISG). Ausschließlicher Gerichtsstand für alle
+Streitigkeiten aus oder im Zusammenhang mit diesem Vertrag ist Pirmasens,
+Deutschland, sofern gesetzlich zulässig.
+
+──────────────────────────────────────────────────────────────────────────────
+© NOTAVIS GmbH, Pirmasens. Alle Rechte vorbehalten.

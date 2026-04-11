@@ -476,6 +476,7 @@ MainWindow::MainWindow(QWidget *parent)
         settings.remove(KeygenConfig::SETTINGS_LICENSE_ID);
         settings.remove(KeygenConfig::SETTINGS_LICENSE_TYPE);
         settings.remove(KeygenConfig::SETTINGS_TRIAL_EXPIRY);
+        settings.remove("Legal/EulaAccepted");
         settings.sync();
 
         // Lizenzdialog zeigen

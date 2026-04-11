@@ -1,6 +1,9 @@
 <RCC>
     <qresource prefix="/images">
         <file>logo_notavis.svg</file>
-            <file>icon_biegewinkel.ico</file>
+        <file>icon_biegewinkel.ico</file>
+    </qresource>
+    <qresource prefix="/eula">
+        <file>EULA.txt</file>
     </qresource>
 </RCC>

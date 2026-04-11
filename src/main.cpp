@@ -10,6 +10,14 @@
 #include <QDateTime>
 #include <QMutex>
 #include <QtGlobal>
+#include <QSettings>
+#include <QDialog>
+#include <QVBoxLayout>
+#include <QPlainTextEdit>
+#include <QCheckBox>
+#include <QDialogButtonBox>
+#include <QPushButton>
+#include <QFont>
 #include "mainwindow.h"
 #include "licensemanager.h"
 #include "licensedialog.h"
@@ -67,7 +75,7 @@ static void appMessageHandler(QtMsgType type,
 int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
-    app.setApplicationName("VC3DProfileViewer_Biegewinkel");
+    app.setApplicationName("VC Profile Viewer Biegewinkel");
     app.setApplicationVersion("1.0.0");
     app.setOrganizationName("NOTAVIS");
     app.setWindowIcon(QIcon(":/images/icon_biegewinkel.ico"));
@@ -83,7 +91,7 @@ int main(int argc, char *argv[])
         if (g_logFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
             g_logStream.setDevice(&g_logFile);
             g_logStream.setEncoding(QStringConverter::Utf8);
-            g_logStream << "VC 3D Profile Viewer – Application Log\n";
+            g_logStream << "VC Profile Viewer Biegewinkel – Application Log\n";
             g_logStream << "Started: "
                         << QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss") << "\n";
             g_logStream << "Build:   " << __DATE__ << " " << __TIME__ << "\n";
@@ -121,6 +129,51 @@ int main(int argc, char *argv[])
         "QLabel { color: #ddd; } "
         "QStatusBar { background: #222; color: #888; }"
     );
+
+    // ── EULA – einmalig beim ersten Start ─────────────────────────────
+    {
+        QSettings eulaSettings;
+        if (!eulaSettings.value("Legal/EulaAccepted", false).toBool()) {
+            // EULA-Text aus eingebetteter Ressource laden
+            QString eulaText;
+            QFile ef(":/eula/EULA.txt");
+            if (ef.open(QIODevice::ReadOnly | QIODevice::Text))
+                eulaText = QString::fromUtf8(ef.readAll());
+            else
+                eulaText = "EULA konnte nicht geladen werden.";
+
+            QDialog eulaDlg;
+            eulaDlg.setWindowTitle("VC Profile Viewer Biegewinkel – Lizenzvereinbarung");
+            eulaDlg.setMinimumSize(640, 480);
+
+            auto *layout  = new QVBoxLayout(&eulaDlg);
+            auto *textEdit = new QPlainTextEdit(eulaText, &eulaDlg);
+            textEdit->setReadOnly(true);
+            textEdit->setFont(QFont("Courier New", 9));
+            layout->addWidget(textEdit);
+
+            auto *cbAccept = new QCheckBox(
+                "Ich habe die Lizenzvereinbarung gelesen und stimme zu.", &eulaDlg);
+            layout->addWidget(cbAccept);
+
+            auto *btnBox = new QDialogButtonBox(
+                QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &eulaDlg);
+            btnBox->button(QDialogButtonBox::Ok)->setEnabled(false);
+            btnBox->button(QDialogButtonBox::Ok)->setText("Akzeptieren");
+            btnBox->button(QDialogButtonBox::Cancel)->setText("Ablehnen");
+            layout->addWidget(btnBox);
+
+            QObject::connect(cbAccept, &QCheckBox::toggled,
+                btnBox->button(QDialogButtonBox::Ok), &QPushButton::setEnabled);
+            QObject::connect(btnBox, &QDialogButtonBox::accepted, &eulaDlg, &QDialog::accept);
+            QObject::connect(btnBox, &QDialogButtonBox::rejected, &eulaDlg, &QDialog::reject);
+
+            if (eulaDlg.exec() != QDialog::Accepted)
+                return 0; // Abgelehnt – App beenden
+
+            eulaSettings.setValue("Legal/EulaAccepted", true);
+        }
+    }
 
     // ── Lizenzprüfung ──────────────────────────────────────────────────
     LicenseManager licenseManager;

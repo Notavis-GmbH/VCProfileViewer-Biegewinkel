@@ -451,7 +451,7 @@ MainWindow::MainWindow(QWidget *parent)
 #ifndef BUILD_TIMESTAMP
 #  define BUILD_TIMESTAMP "dev"
 #endif
-    setWindowTitle(QString("VC 3D Profile Viewer  v2.2-%1")
+    setWindowTitle(QString("VC Profile Viewer Biegewinkel  v2.2-%1")
                    .arg(QString(BUILD_TIMESTAMP).replace(" ","-").replace(":","")));
     setMinimumSize(1100, 700);
 

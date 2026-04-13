@@ -35,7 +35,19 @@ Es ist Ihnen untersagt:
   d) Schutzmaßnahmen oder Lizenzprüfmechanismen der Software zu umgehen.
 
 ──────────────────────────────────────────────────────────────────────────────
-§ 4  HAFTUNGSAUSSCHLUSS
+§ 4  PROPRIETÄRES VC-PROTOKOLL
+──────────────────────────────────────────────────────────────────────────────
+Die Software kommuniziert mit VC nano 3D Z Laserscannern über ein proprietäres
+TCP/IP-Protokoll der Vision Components GmbH (nachfolgend „VC-Protokoll"). Das
+VC-Protokoll, einschließlich sämtlicher Protokollstrukturen, Befehls-IDs,
+Synchronisationsbytes und Datenformate, ist urheberrechtlich geschütztes
+Eigentum der Vision Components GmbH und/oder der NOTAVIS GmbH. Jede
+Vervielfältigung, Weitergabe, Analyse oder anderweitige Nutzung dieser
+Protokollinformationen außerhalb der bestimmungsgemäßen Verwendung dieser
+Software ist ohne ausdrückliche schriftliche Genehmigung untersagt.
+
+──────────────────────────────────────────────────────────────────────────────
+§ 5  HAFTUNGSAUSSCHLUSS
 ──────────────────────────────────────────────────────────────────────────────
 Die Software wird „wie besehen" (as is) ohne jegliche ausdrückliche oder
 stillschweigende Gewährleistung bereitgestellt. Die NOTAVIS GmbH übernimmt
@@ -46,7 +58,7 @@ ausgeschlossen. Dies gilt insbesondere für mittelbare Schäden, entgangenen
 Gewinn oder Datenverlust.
 
 ──────────────────────────────────────────────────────────────────────────────
-§ 5  DATENSCHUTZ
+§ 6  DATENSCHUTZ
 ──────────────────────────────────────────────────────────────────────────────
 Bei der Aktivierung einer Lizenz wird eine anonymisierte Maschinen-ID an den
 Lizenzserver (api.keygen.sh) der NOTAVIS GmbH übertragen. Es werden keine
@@ -54,7 +66,7 @@ personenbezogenen Daten gespeichert oder weitergegeben. Die Verarbeitung erfolgt
 ausschließlich zur Verwaltung der Lizenzaktivierung.
 
 ──────────────────────────────────────────────────────────────────────────────
-§ 6  KÜNDIGUNG UND LIZENZENTZUG
+§ 7  KÜNDIGUNG UND LIZENZENTZUG
 ──────────────────────────────────────────────────────────────────────────────
 Diese Lizenz gilt auf unbestimmte Zeit. Sie erlischt automatisch und ohne
 Vorankündigung, wenn Sie gegen eine der Bedingungen dieses Vertrages verstoßen.
@@ -62,7 +74,7 @@ Im Falle der Beendigung sind Sie verpflichtet, alle Kopien der Software
 unverzüglich zu löschen.
 
 ──────────────────────────────────────────────────────────────────────────────
-§ 7  ANWENDBARES RECHT UND GERICHTSSTAND
+§ 8  ANWENDBARES RECHT UND GERICHTSSTAND
 ──────────────────────────────────────────────────────────────────────────────
 Dieser Vertrag unterliegt dem Recht der Bundesrepublik Deutschland unter
 Ausschluss des UN-Kaufrechts (CISG). Ausschließlicher Gerichtsstand für alle

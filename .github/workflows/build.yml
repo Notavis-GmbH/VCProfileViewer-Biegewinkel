@@ -68,13 +68,20 @@ jobs:
       run: |
         $ts = Get-Date -Format "yyyy-MM-dd-HHmm"
         Write-Host "Build timestamp: $ts"
-        # Token aus Env-Variable lesen - nicht direkt als cmake-Argument expandieren
-        $token = $env:KEYGEN_PRODUCT_TOKEN
-        Write-Host "Token length: $($token.Length)"
-        $accountId      = $env:KEYGEN_ACCOUNT_ID
-        $commercialId   = $env:KEYGEN_COMMERCIAL_POLICY_ID
-        $trialId        = $env:KEYGEN_TRIAL_POLICY_ID
-        $productId      = $env:KEYGEN_PRODUCT_ID
+        # Sicherheitsrelevante Variablen aus Env lesen
+        $token        = $env:KEYGEN_PRODUCT_TOKEN
+        $accountId    = $env:KEYGEN_ACCOUNT_ID
+        $commercialId = $env:KEYGEN_COMMERCIAL_POLICY_ID
+        $trialId      = $env:KEYGEN_TRIAL_POLICY_ID
+        $productId    = $env:KEYGEN_PRODUCT_ID
+        # Debug: Längen prüfen (keine Werte ausgeben)
+        Write-Host "Token length:        $($token.Length)"
+        Write-Host "AccountId length:    $($accountId.Length)"
+        Write-Host "CommercialId length: $($commercialId.Length)"
+        Write-Host "TrialId length:      $($trialId.Length)"
+        Write-Host "ProductId length:    $($productId.Length)"
+        # CMake-Build-Verzeichnis bereinigen um Cache-Probleme zu vermeiden
+        if (Test-Path build) { Remove-Item -Recurse -Force build }
         cmake -B build -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=Release `
           "-DCMAKE_PREFIX_PATH=C:\Qt\6.8.1\msvc2022_64" `
           "-DBUILD_TIMESTAMP=$ts" `

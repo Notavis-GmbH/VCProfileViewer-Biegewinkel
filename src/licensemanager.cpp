@@ -491,10 +491,13 @@ QJsonDocument LicenseManager::postJson(const QString& endpoint,
     timeoutTimer.stop();
 
     if (reply->error() != QNetworkReply::NoError) {
+        const QString errStr = reply->errorString();
+        const int errCode = static_cast<int>(reply->error());
         qCWarning(licenseLog) << "Netzwerkfehler (POST" << endpoint << "):"
-                              << reply->error()
-                              << reply->errorString();
-        m_lastError = reply->errorString();
+                              << "ErrorCode=" << errCode
+                              << "ErrorString=" << errStr
+                              << "URL=" << reply->url().toString();
+        m_lastError = tr("Netzwerkfehler (Code %1): %2").arg(errCode).arg(errStr);
         httpStatus  = -1;
         reply->deleteLater();
         return QJsonDocument{};

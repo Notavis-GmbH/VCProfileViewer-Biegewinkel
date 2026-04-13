@@ -7,17 +7,19 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
-# Explizite Schreibrechte für das GITHUB_TOKEN (nötig für Release-Erstellung)
-permissions:
-  contents: write
-
 jobs:
   build:
     name: Build & Package (Windows x64)
     runs-on: windows-2022
+    permissions:
+      contents: write
 
     env:
-      KEYGEN_PRODUCT_TOKEN: ${{ secrets.KEYGEN_PRODUCT_TOKEN }}
+      KEYGEN_PRODUCT_TOKEN:          ${{ secrets.KEYGEN_PRODUCT_TOKEN }}
+      KEYGEN_ACCOUNT_ID:             ${{ secrets.KEYGEN_ACCOUNT_ID }}
+      KEYGEN_COMMERCIAL_POLICY_ID:   ${{ secrets.KEYGEN_COMMERCIAL_POLICY_ID }}
+      KEYGEN_TRIAL_POLICY_ID:        ${{ secrets.KEYGEN_TRIAL_POLICY_ID }}
+      KEYGEN_PRODUCT_ID:             ${{ secrets.KEYGEN_PRODUCT_ID }}
 
     steps:
     # ── 1. Code auschecken ────────────────────────────────────────────────────
@@ -69,10 +71,18 @@ jobs:
         # Token aus Env-Variable lesen - nicht direkt als cmake-Argument expandieren
         $token = $env:KEYGEN_PRODUCT_TOKEN
         Write-Host "Token length: $($token.Length)"
+        $accountId      = $env:KEYGEN_ACCOUNT_ID
+        $commercialId   = $env:KEYGEN_COMMERCIAL_POLICY_ID
+        $trialId        = $env:KEYGEN_TRIAL_POLICY_ID
+        $productId      = $env:KEYGEN_PRODUCT_ID
         cmake -B build -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=Release `
           "-DCMAKE_PREFIX_PATH=C:\Qt\6.8.1\msvc2022_64" `
           "-DBUILD_TIMESTAMP=$ts" `
-          "-DKEYGEN_PRODUCT_TOKEN=$token"
+          "-DKEYGEN_PRODUCT_TOKEN=$token" `
+          "-DKEYGEN_ACCOUNT_ID=$accountId" `
+          "-DKEYGEN_COMMERCIAL_POLICY_ID=$commercialId" `
+          "-DKEYGEN_TRIAL_POLICY_ID=$trialId" `
+          "-DKEYGEN_PRODUCT_ID=$productId"
 
     # ── 7. Bauen ──────────────────────────────────────────────────────────────
     - name: Build

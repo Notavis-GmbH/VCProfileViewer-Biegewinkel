@@ -1,104 +1,83 @@
-# VC 3D Profile Viewer v2.2
+# VC 3D Profile Viewer – Biegewinkel
 
-**Vision Components VC nano 3D Z** – Profil-Viewer mit ROI-Einstellung, Winkelberechnung (OLS / RANSAC / Hough / Auto), Messwert-Log und JSON-Aufnahme.
+**Profil-Viewer für die Vision Components VC nano 3D Z** mit ROI-Einstellung, Biegewinkelberechnung (OLS / RANSAC / Hough / Auto), Messwert-Log und JSON-Aufnahme.
+
+Entwickelt von [NOTAVIS GmbH](https://www.notavis.com) · Member of the Vision Components Group
 
 ---
 
-## Quickstart für neue Teammitglieder
+## Features
 
-### 1 · Installation
+- **Live-Profil-Anzeige** direkt vom VC nano 3D Z Sensor
+- **Zwei unabhängige ROIs** (blau / orange) für präzise Biegewinkelberechnung
+- **4 Linienfinder-Methoden**: OLS, RANSAC, Hough, Auto
+- **JSON-Wiedergabe** für Offline-Tests ohne physischen Sensor
+- **Messwert-Log (CSV)** mit Zeitstempel: Phi1, Phi2, Biegewinkel, RMS, Methode
+- **Preset-Verwaltung** zum Speichern und Laden von Messkonfigurationen
+- **Lock-Funktion** gegen versehentliche Änderungen im laufenden Betrieb
 
-1. ZIP entpacken in einen Ordner deiner Wahl (z. B. `C:\Tools\VC3DProfileViewer\`)
-2. `VC3DProfileViewer.exe` per Doppelklick starten – keine Installation, kein Installer
+---
+
+## Voraussetzungen
+
+- Windows 10 / 11 (x64)
+- Vision Components VC nano 3D Z (Ethernet, im gleichen Subnetz erreichbar)
+- Keine zusätzliche Software oder Installation erforderlich
+
+---
+
+## Schnellstart
+
+1. ZIP entpacken in einen Ordner (z. B. `C:\Tools\VC3DProfileViewer\`)
+2. `VC3DProfileViewer.exe` per Doppelklick starten
 3. Beim ersten Start wird `Devices\Presets.ini` mit dem Preset **TestTyp_1** angelegt
+4. Datenquelle auf **JSON Wiedergabe** setzen und `TestData\` öffnen → sofort betriebsbereit ohne Sensor
+
+> Ausführliche Anleitung: [`docs/QuickStartGuide_VCProfileViewer_Biegewinkel.pdf`](docs/QuickStartGuide_VCProfileViewer_Biegewinkel.pdf)
 
 ---
 
-### 2 · Sensor-IP konfigurieren
+## Sensor verbinden (Live-Betrieb)
 
-| Feld | Standard | Wo |
+| Feld | Standard | Ort |
 |---|---|---|
 | IP-Adresse | `192.168.3.15` | Linkes Panel → **Sensor (Live)** |
 | Port | `1096` | Linkes Panel → **Sensor (Live)** |
 
-**Schritte:**
 1. Datenquelle oben auf **Live Sensor** setzen
 2. IP und Port anpassen
 3. **Verbinden** klicken → Status wechselt auf grün „Verbunden"
-4. Das Profil erscheint sofort im Chart
 
-> **Hinweis:** Falls der Sensor zuvor mit 3DSmartShape verwendet wurde, Stromversorgung kurz trennen oder Port `1097` probieren.
+> Falls der Sensor zuvor mit 3DSmartShape verwendet wurde, Stromversorgung kurz trennen oder Port `1097` probieren.
 
 ---
 
-### 3 · ROI einrichten
+## ROI & Winkelberechnung
 
-Die zwei Auswertefenster (ROI 1 blau / ROI 2 orange) definieren wo die Fit-Geraden berechnet werden.
+Die zwei Auswertefenster definieren, wo die Fit-Geraden berechnet werden.
 
-**Methode A – Spinboxen:**
-- Linkes Panel → **ROI Einstellungen**
-- Start- und Endwert in mm eintragen
+**Per Maus (empfohlen):** Linke Maustaste gedrückt halten und im Chart ziehen.
 
-**Methode B – Maus im Chart (empfohlen):**
-1. Linke Maustaste gedrückt halten und im Profil-Chart ziehen
-2. ROI 1 im linken Bereich aufziehen, ROI 2 im rechten Bereich
-3. Werte werden automatisch in die Spinboxen übernommen
-
-**Linienfinder-Methode** pro ROI wählbar:
+**Linienfinder-Methoden:**
 
 | Methode | Empfohlen für |
 |---|---|
 | **OLS** | Saubere Profile ohne Reflexionen |
 | **RANSAC** | Profile mit einzelnen Ausreißern |
 | **Hough** | Fragmentierte Profile / Lücken |
-| **Auto** | Automatische Wahl je nach Inlier-Verhältnis *(Standard)* |
+| **Auto** | Automatische Wahl *(Standard)* |
 
-**Winkel-Quadrant** (Messergebnis-Panel):
-- ◤ ◥ ◣ ◢ wählen welcher der vier Winkel am Schnittpunkt gemessen wird
-- Gelber Bogen im Chart zeigt die aktive Messrichtung
+**Winkel-Quadrant:** ◤ ◥ ◣ ◢ wählen, welcher der vier Winkel am Schnittpunkt gemessen wird. Der gelbe Bogen im Chart zeigt die aktive Messrichtung.
 
 ---
 
-### 4 · JSON-Wiedergabe-Modus (Offline)
+## JSON-Wiedergabe (Offline-Modus)
 
 Ideal zum Testen und Einstellen der ROIs ohne physischen Sensor.
 
-**Profiles aufzeichnen (Live-Modus):**
-1. Mit Sensor verbinden
-2. Linkes Panel → **Profil-Aufnahme (JSON)** → Ordner wählen
-3. Optional: Max. Frames begrenzen (0 = unbegrenzt)
-4. **⏺ Aufnahme starten** → Frames werden als `LaserLineData_*.json` gespeichert
-
-**Aufnahmen abspielen:**
 1. Datenquelle auf **JSON Wiedergabe** setzen
-2. **„..."** → Ordner mit den JSON-Dateien wählen (`TestData\` oder eigene Recordings)
-3. **Play** drücken – oder Schritt für Schritt mit `◀◀` / `▶▶`
-4. Geschwindigkeit per Schieberegler anpassen
-
-> **Tipp:** Den **TestTyp_1** Preset laden – dieser hat ROI und Ordner bereits auf die mitgelieferten 20 Testprofile voreingestellt.
-
----
-
-### 5 · Typverwaltung (Presets)
-
-Einstellungen (IP, ROI, Methode, Ordner) als benannter Typ speichern:
-
-1. Alle Einstellungen wie gewünscht vornehmen
-2. **Speichern** → Name eingeben → OK
-3. Nächstes Mal: Typ aus Dropdown wählen → alle Einstellungen werden sofort übernommen (Sensor startet **nicht** automatisch)
-
-**Lock-Funktion:** 🔒 Button sperrt alle Einstellungen gegen versehentliche Änderungen im laufenden Betrieb.
-
----
-
-### 6 · Messwert-Log (CSV)
-
-Zeichnet Phi1, Phi2, Biegewinkel, RMS und Methode mit Zeitstempel auf:
-
-1. Linkes Panel → **Messwert-Log (CSV)**
-2. Pfad wählen oder Standard verwenden (`Logs\MeasLog_*.csv`)
-3. **● Aufzeichnung starten** → läuft bei jedem Frame mit
-4. CSV direkt in Excel öffnen (Semikolon-Trennzeichen, UTF-8)
+2. **„..."** → Ordner mit JSON-Dateien wählen (`TestData\` oder eigene Aufnahmen)
+3. **Play** drücken oder mit `◀◀` / `▶▶` schrittweise navigieren
 
 ---
 
@@ -109,19 +88,18 @@ VC3DProfileViewer\
   VC3DProfileViewer.exe     – Hauptprogramm
   Qt6*.dll                  – Qt-Laufzeitbibliotheken
   TestData\                 – 20 mitgelieferte JSON-Testprofile
-  Recordings\               – Eigene Sensor-Aufnahmen (wird automatisch angelegt)
-  Logs\                     – Messwert-Logs CSV (wird automatisch angelegt)
-  Data\                     – Freier Ablageordner
+  Recordings\               – Eigene Sensor-Aufnahmen (automatisch angelegt)
+  Logs\                     – Messwert-Logs CSV (automatisch angelegt)
   Devices\
     default.ini             – Letzte Einstellungen (automatisch gespeichert)
     Presets.ini             – Gespeicherte Typen
   resources\
-    logo_notavis.svg        – NOTAVIS Logo (Wasserzeichen + Hilfe)
+    logo_notavis.svg        – NOTAVIS Logo
 ```
 
 ---
 
-## Tastatur & Maus im Chart
+## Tastatur & Maus
 
 | Aktion | Funktion |
 |---|---|
@@ -130,14 +108,6 @@ VC3DProfileViewer\
 | Doppelklick | Zoom auf alle Messdaten zurücksetzen |
 | Linke Maustaste + Ziehen | ROI aufziehen |
 | **? Hilfe** (Button unten rechts) | Dokumentation einblenden |
-
----
-
-## Technische Voraussetzungen
-
-- Windows 10 / 11 (x64)
-- Netzwerkverbindung zum Sensor (Ethernet, IP im gleichen Subnetz)
-- Keine zusätzliche Software erforderlich
 
 ---
 
@@ -150,18 +120,40 @@ Installation: ZIP entpacken → `VC3DProfileViewer.app` in Programme ziehen → 
 
 ---
 
+## Dokumentation
+
+| Dokument | Beschreibung |
+|---|---|
+| [Quick Start Guide](docs/QuickStartGuide_VCProfileViewer_Biegewinkel.pdf) | Einstieg in 5 Minuten |
+| [Ausführliche Dokumentation](docs/Dokumentation_VCProfileViewer_Biegewinkel.pdf) | Vollständige Funktionsreferenz |
+
+---
+
 ## Fehlerbehebung
 
 | Problem | Lösung |
 |---|---|
 | Kein Profil sichtbar nach Verbinden | ROI-Bereiche prüfen – müssen im X-Bereich des Profils liegen |
-| Sensor verbindet nicht | IP/Port prüfen, Sensor neu starten, Port 1097 probieren |
-| App friert ein | Linienfinder-Methode auf OLS wechseln (RANSAC/Hough bei sehr vielen Punkten langsamer) |
+| Sensor verbindet nicht | IP/Port prüfen, Sensor neu starten, Port `1097` probieren |
+| App reagiert langsam | Linienfinder-Methode auf OLS wechseln |
 | Wasserzeichen fehlt | `resources\logo_notavis.svg` neben der EXE vorhanden? |
-| Versionsnummer zeigt „dev" | Nur bei lokalem Build ohne CI – normal |
 
-Bei Problemen: `Logs\AppLog_*.txt` an die Entwicklung schicken.
+Bei Problemen: `Logs\AppLog_*.txt` beilegen und an den Support senden.
 
 ---
 
-*© 2026 NOTAVIS GmbH · Member of the Vision Components Group · erstellt mit Qt 6.8 / MSVC2022*
+## Lizenz
+
+Proprietäre Software – © 2026 NOTAVIS GmbH. Alle Rechte vorbehalten.
+Nutzung nur gemäß beiliegender `LICENSE.txt` gestattet.
+
+---
+
+## Kontakt
+
+**NOTAVIS GmbH** · Member of the Vision Components Group  
+Web: [www.notavis.com](https://www.notavis.com)
+
+---
+
+*Erstellt mit Qt 6.8 / MSVC2022*

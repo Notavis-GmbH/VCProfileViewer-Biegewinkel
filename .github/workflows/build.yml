@@ -24,7 +24,7 @@ jobs:
     steps:
     # ── 1. Code auschecken ────────────────────────────────────────────────────
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
 
     # ── 2. Qt Cache prüfen ────────────────────────────────────────────────────
     - name: Cache Qt 6.8.1

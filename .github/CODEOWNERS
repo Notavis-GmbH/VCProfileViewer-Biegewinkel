@@ -1,0 +1,12 @@
+# Notavis CODEOWNERS — Auto-Reviewer-Zuweisung
+# Doku: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-policies/about-code-owners
+
+# Default-Owner für alles
+*                                   @PatrikDrexel
+
+# Standards-/Doku-Bereiche
+/AGENTS.md                          @PatrikDrexel
+/docs/                              @PatrikDrexel
+/docs/adr/                          @PatrikDrexel
+/.github/                           @PatrikDrexel
+/.github/workflows/                 @PatrikDrexel

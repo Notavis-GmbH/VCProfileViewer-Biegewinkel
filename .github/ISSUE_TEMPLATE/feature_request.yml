@@ -1,0 +1,48 @@
+name: ✨ Feature Request
+description: Neues Feature oder Verbesserungsvorschlag
+title: "[feat] "
+labels: ["enhancement", "triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / Motivation
+      description: Welches Problem soll gelöst werden? Wer profitiert?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Vorschlag
+      description: Wie soll die Lösung aussehen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternativen
+      description: Welche Alternativen wurden in Betracht gezogen?
+
+  - type: dropdown
+    id: track
+    attributes:
+      label: Betroffener Track
+      options:
+        - Driver / Firmware
+        - Application
+        - Beides
+        - Doku / CI / Tooling
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Akzeptanzkriterien
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+    validations:
+      required: true

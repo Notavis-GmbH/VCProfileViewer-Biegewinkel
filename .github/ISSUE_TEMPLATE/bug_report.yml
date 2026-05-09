@@ -1,0 +1,74 @@
+name: 🐞 Bug Report
+description: Reproduzierbarer Fehler in Code, Build oder Laufzeitverhalten
+title: "[bug] "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Bitte folge dem Notavis SDS — alle Felder ausfüllen.
+        Standard: https://github.com/Notavis-GmbH/platform-builder-docs/tree/main/100_Software-Development-Standard
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Zusammenfassung
+      description: Was ist passiert? (1–2 Sätze)
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduktion
+      description: Schritt-für-Schritt
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Erwartetes Verhalten
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Tatsächliches Verhalten (inkl. Logs / Stacktrace)
+    validations:
+      required: true
+
+  - type: input
+    id: env
+    attributes:
+      label: Umgebung
+      description: OS, Compiler, Board (z.B. RPi5 / RK3588), Firmware-Version, Commit-SHA
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - S1 — Blocker / Crash / Datenverlust
+        - S2 — Major / Funktion unbrauchbar
+        - S3 — Minor / Workaround vorhanden
+        - S4 — Cosmetic
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: Keine Secrets / Credentials in Logs / Anhängen
+          required: true
+        - label: Suche nach Duplikaten erfolgt
+          required: true

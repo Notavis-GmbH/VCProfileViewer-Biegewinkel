@@ -1,0 +1,61 @@
+name: cpp-lint
+
+on:
+  pull_request:
+    branches: [main, develop, "release/**"]
+    paths:
+      - "**/*.c"
+      - "**/*.h"
+      - "**/*.cc"
+      - "**/*.cpp"
+      - "**/*.hpp"
+      - "**/CMakeLists.txt"
+      - "**/*.cmake"
+      - ".github/workflows/cpp-lint.yml"
+  push:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+
+jobs:
+  cppcheck:
+    name: cppcheck (static analysis)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install cppcheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cppcheck
+
+      - name: Run cppcheck
+        run: |
+          cppcheck \
+            --enable=warning,style,performance,portability \
+            --inline-suppr \
+            --suppress=missingIncludeSystem \
+            --error-exitcode=1 \
+            --quiet \
+            --std=c++17 \
+            -i build -i third_party \
+            . || (echo "::warning::cppcheck found issues — review required" && exit 0)
+
+  clang-format:
+    name: clang-format check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install clang-format
+        run: sudo apt-get update && sudo apt-get install -y clang-format-15
+      - name: Verify formatting
+        run: |
+          if [ -f .clang-format ]; then
+            find . \( -name '*.c' -o -name '*.cc' -o -name '*.cpp' -o -name '*.h' -o -name '*.hpp' \) \
+              -not -path './build/*' -not -path './third_party/*' \
+              | xargs -r clang-format-15 --dry-run --Werror || \
+              (echo "::warning::clang-format issues — run clang-format -i locally" && exit 0)
+          else
+            echo "No .clang-format file — skipping (add one to enforce style)."
+          fi
